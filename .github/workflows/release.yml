@@ -26,17 +26,33 @@ jobs:
             os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: gdble.dll
-          
+
           - platform: macos
             os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: libgdble.dylib
-          
+
           - platform: macos-arm
             os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: libgdble.dylib
-          
+
+          - platform: android-arm64
+            os: ubuntu-latest
+            target: aarch64-linux-android
+            artifact_name: libgdble.so
+
+          - platform: android-x86_64
+            os: ubuntu-latest
+            target: x86_64-linux-android
+            artifact_name: libgdble.so
+
+          # - platform: android-armv7
+          #   os: ubuntu-latest
+          #   target: armv7-linux-androideabi
+          #   artifact_name: libgdble.so
+          #   # Note: Android ARMv7 is not supported due to godot-ffi compatibility issues
+
           # - platform: linux
           #   os: ubuntu-latest
           #   target: x86_64-unknown-linux-gnu
@@ -51,6 +67,18 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Setup Android NDK
+        if: startsWith(matrix.platform, 'android')
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r25c
+
+      - name: Install cross-compilation tools for Android
+        if: startsWith(matrix.platform, 'android')
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
+          echo "ANDROID_NDK=$ANDROID_NDK_HOME" >> $GITHUB_ENV
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -71,21 +99,49 @@ jobs:
           path: target
           key: ${{ runner.os }}-${{ matrix.target }}-target-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build release
+      - name: Build release for Android
+        if: startsWith(matrix.platform, 'android')
+        run: |
+          cargo build --release --target ${{ matrix.target }} \
+            --no-default-features \
+            --features "android"
+
+      - name: Build release for other platforms
+        if: "!startsWith(matrix.platform, 'android')"
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Prepare artifact
         shell: bash
         run: |
           mkdir -p artifacts/${{ matrix.platform }}
-          # Copy from target-specific directory
-          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/${{ matrix.artifact_name }}
+          
+          # Rename and copy with platform and architecture suffix
+          case "${{ matrix.platform }}" in
+            windows)
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/gdble.windows.x86_64.dll
+              ;;
+            macos)
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/libgdble.macos.x86_64.dylib
+              ;;
+            macos-arm)
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/libgdble.macos.arm64.dylib
+              ;;
+            android-arm64)
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/libgdble.android.arm64.so
+              ;;
+            android-x86_64)
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/libgdble.android.x86_64.so
+              ;;
+            *)
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/${{ matrix.artifact_name }}
+              ;;
+          esac
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: gdble-${{ matrix.platform }}
-          path: artifacts/${{ matrix.platform }}/${{ matrix.artifact_name }}
+          path: artifacts/${{ matrix.platform }}/*
           retention-days: 7
 
   package:
@@ -109,18 +165,28 @@ jobs:
           cp demo/addons/gdble/gdble.gdextension release/addons/gdble/
           
           # Copy Windows binary
-          if [ -f artifacts/gdble-windows/gdble.dll ]; then
-            cp artifacts/gdble-windows/gdble.dll release/addons/gdble/
+          if [ -f artifacts/gdble-windows/gdble.windows.x86_64.dll ]; then
+            cp artifacts/gdble-windows/gdble.windows.x86_64.dll release/addons/gdble/gdble.dll
           fi
-          
+
           # Copy macOS x86_64 binary
-          if [ -f artifacts/gdble-macos/libgdble.dylib ]; then
-            cp artifacts/gdble-macos/libgdble.dylib release/addons/gdble/libgdble.x86_64.dylib
+          if [ -f artifacts/gdble-macos/libgdble.macos.x86_64.dylib ]; then
+            cp artifacts/gdble-macos/libgdble.macos.x86_64.dylib release/addons/gdble/libgdble.x86_64.dylib
           fi
-          
+
           # Copy macOS ARM binary
-          if [ -f artifacts/gdble-macos-arm/libgdble.dylib ]; then
-            cp artifacts/gdble-macos-arm/libgdble.dylib release/addons/gdble/libgdble.arm64.dylib
+          if [ -f artifacts/gdble-macos-arm/libgdble.macos.arm64.dylib ]; then
+            cp artifacts/gdble-macos-arm/libgdble.macos.arm64.dylib release/addons/gdble/libgdble.arm64.dylib
+          fi
+
+          # Copy Android ARM64 binary
+          if [ -f artifacts/gdble-android-arm64/libgdble.android.arm64.so ]; then
+            cp artifacts/gdble-android-arm64/libgdble.android.arm64.so release/addons/gdble/libgdble.arm64.so
+          fi
+
+          # Copy Android x86_64 binary
+          if [ -f artifacts/gdble-android-x86_64/libgdble.android.x86_64.so ]; then
+            cp artifacts/gdble-android-x86_64/libgdble.android.x86_64.so release/addons/gdble/libgdble.x86_64.so
           fi
           
           # Create universal macOS binary if both architectures exist
@@ -202,20 +268,31 @@ jobs:
           fi
           
           # Copy Windows binary
-          if [ -f artifacts/gdble-windows/gdble.dll ]; then
-            cp artifacts/gdble-windows/gdble.dll addons/gdble/
+          if [ -f artifacts/gdble-windows/gdble.windows.x86_64.dll ]; then
+            cp artifacts/gdble-windows/gdble.windows.x86_64.dll addons/gdble/gdble.dll
             echo "✓ Updated Windows binary"
           fi
           
           # Copy macOS binaries for universal binary creation
-          if [ -f artifacts/gdble-macos/libgdble.dylib ]; then
-            cp artifacts/gdble-macos/libgdble.dylib addons/gdble/libgdble.x86_64.dylib
+          if [ -f artifacts/gdble-macos/libgdble.macos.x86_64.dylib ]; then
+            cp artifacts/gdble-macos/libgdble.macos.x86_64.dylib addons/gdble/libgdble.x86_64.dylib
             echo "✓ Downloaded macOS x86_64 binary"
           fi
-          
-          if [ -f artifacts/gdble-macos-arm/libgdble.dylib ]; then
-            cp artifacts/gdble-macos-arm/libgdble.dylib addons/gdble/libgdble.arm64.dylib
+
+          if [ -f artifacts/gdble-macos-arm/libgdble.macos.arm64.dylib ]; then
+            cp artifacts/gdble-macos-arm/libgdble.macos.arm64.dylib addons/gdble/libgdble.arm64.dylib
             echo "✓ Downloaded macOS ARM64 binary"
+          fi
+
+          # Copy Android binaries
+          if [ -f artifacts/gdble-android-arm64/libgdble.android.arm64.so ]; then
+            cp artifacts/gdble-android-arm64/libgdble.android.arm64.so addons/gdble/libgdble.arm64.so
+            echo "✓ Downloaded Android ARM64 binary"
+          fi
+
+          if [ -f artifacts/gdble-android-x86_64/libgdble.android.x86_64.so ]; then
+            cp artifacts/gdble-android-x86_64/libgdble.android.x86_64.so addons/gdble/libgdble.x86_64.so
+            echo "✓ Downloaded Android x86_64 binary"
           fi
           
           # Create universal binary if both architectures exist
@@ -240,7 +317,7 @@ jobs:
           git config --local user.name "github-actions[bot]"
           
           # Add all files in addons/gdble
-          git add addons/gdble/*.dll addons/gdble/*.dylib addons/gdble/*.gdextension 2>/dev/null || true
+          git add addons/gdble/*.dll addons/gdble/*.dylib addons/gdble/*.so addons/gdble/*.gdextension 2>/dev/null || true
           
           if git diff --staged --quiet; then
             echo "No changes to commit"

@@ -300,9 +300,7 @@ func _on_characteristic_written(char_uuid: String):
 
 func _on_characteristic_notified(char_uuid: String, data: PackedByteArray):
 	"""收到特征通知（这是接收数据的主要方式）"""
-	print("\n" + "="*60)
 	print("=== NOTIFICATION RECEIVED ===")
-	print("="*60)
 	print("  UUID: ", char_uuid)
 	print("  Length: ", data.size(), " bytes")
 	print("  Hex: ", data.hex_encode())
@@ -316,8 +314,6 @@ func _on_characteristic_notified(char_uuid: String, data: PackedByteArray):
 	if char_uuid.to_lower() == FFF1_CHARACTERISTIC:
 		print("\n  >>> This notification is from fff1 characteristic! <<<")
 		print("  >>> Your device sent this data <<<")
-	
-	print("="*60)
 
 func _on_operation_failed(operation: String, error: String):
 	"""操作失败"""
