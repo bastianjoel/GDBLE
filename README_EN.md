@@ -127,7 +127,7 @@ GDBLE is a Bluetooth Low Energy (BLE) plugin designed for Godot 4, built with Ru
 | -------- | ------ | ---------------- |
 | Windows  | ✅     | Windows 10+      |
 | macOS    | ✅     | macOS 10.15+     |
-| Linux    | 🚧     | In Development   |
+| Linux    | ✅     |                  |
 
 ---
 

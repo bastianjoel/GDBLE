@@ -37,15 +37,18 @@ jobs:
             target: aarch64-apple-darwin
             artifact_name: libgdble.dylib
           
-          # - platform: linux
-          #   os: ubuntu-latest
-          #   target: x86_64-unknown-linux-gnu
-          #   artifact_name: libgdble.so
-          #   artifact_path: target/release/libgdble.so
+          - platform: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: libgdble.so
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Install Linux BLE deps
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libbluetooth-dev pkg-config libudev-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -113,6 +116,11 @@ jobs:
             cp artifacts/gdble-windows/gdble.dll release/addons/gdble/
           fi
           
+          # Copy Linux binary
+          if [ -f artifacts/gdble-linux/libgdble.so ]; then
+            cp artifacts/gdble-linux/libgdble.so release/addons/gdble/
+          fi
+
           # Copy macOS x86_64 binary
           if [ -f artifacts/gdble-macos/libgdble.dylib ]; then
             cp artifacts/gdble-macos/libgdble.dylib release/addons/gdble/libgdble.x86_64.dylib
@@ -206,6 +214,12 @@ jobs:
             cp artifacts/gdble-windows/gdble.dll addons/gdble/
             echo "✓ Updated Windows binary"
           fi
+
+          # Copy Linux binary
+          if [ -f artifacts/gdble-linux/libgdble.so ]; then
+            cp artifacts/gdble-linux/libgdble.so addons/gdble/
+            echo "✓ Updated Linux binary"
+          fi
           
           # Copy macOS binaries for universal binary creation
           if [ -f artifacts/gdble-macos/libgdble.dylib ]; then
@@ -240,7 +254,7 @@ jobs:
           git config --local user.name "github-actions[bot]"
           
           # Add all files in addons/gdble
-          git add addons/gdble/*.dll addons/gdble/*.dylib addons/gdble/*.gdextension 2>/dev/null || true
+          git add addons/gdble/*.dll addons/gdble/*.dylib addons/gdble/*.so addons/gdble/*.gdextension 2>/dev/null || true
           
           if git diff --staged --quiet; then
             echo "No changes to commit"
