@@ -105,7 +105,9 @@ jobs:
           CC: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}21-clang
           CXX: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}21-clang++
           AR: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
-          CARGO_TARGET_${{ matrix.target }}_LINKER: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}21-clang
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
+          CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android21-clang
+          RUSTFLAGS: -C link-arg=-L${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${{ matrix.target }}/21 -C link-arg=-L${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/lib64
         run: |
           cargo build --release --target ${{ matrix.target }} \
             --no-default-features \
