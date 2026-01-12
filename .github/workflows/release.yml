@@ -379,10 +379,12 @@ jobs:
             
             - ✅ **Windows** 10+ (x86_64)
             - ✅ **macOS** 10.15+ (x86_64, ARM64)
-            - ✅ **Android** 5.0+ (API 21+, ARM64, x86_64)
+            - ⚠️ **Android** 5.0+ (API 21+, ARM64, x86_64) - Not tested, may not work correctly
             - 🚧 **Linux** (In Development)
             
             > ⚠️ **Note**: Android ARMv7 (32-bit) is not supported due to godot-ffi compatibility issues. Please use ARM64 or x86_64 architectures for Android builds.
+            > 
+            > ⚠️ **Important**: Android support in this release has not been tested. While the code compiles successfully, actual functionality on Android devices is not guaranteed. Please test thoroughly before using in production.
             
             ## 📚 Documentation
             
