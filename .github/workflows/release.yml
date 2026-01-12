@@ -101,6 +101,13 @@ jobs:
 
       - name: Build release for Android
         if: startsWith(matrix.platform, 'android')
+        env:
+          CC: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}21-clang
+          CXX: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}21-clang++
+          AR: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
+          CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android21-clang
+          RUSTFLAGS: -C link-arg=-L${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${{ matrix.target }}/21 -C link-arg=-L${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/lib64
         run: |
           mkdir -p .cargo
           cat > .cargo/config.toml << EOF
@@ -385,10 +392,12 @@ jobs:
             
             - ✅ **Windows** 10+ (x86_64)
             - ✅ **macOS** 10.15+ (x86_64, ARM64)
-            - ✅ **Android** 5.0+ (API 21+, ARM64, x86_64)
+            - ⚠️ **Android** 5.0+ (API 21+, ARM64, x86_64) - Not tested, may not work correctly
             - 🚧 **Linux** (In Development)
             
             > ⚠️ **Note**: Android ARMv7 (32-bit) is not supported due to godot-ffi compatibility issues. Please use ARM64 or x86_64 architectures for Android builds.
+            > 
+            > ⚠️ **Important**: Android support in this release has not been tested. While the code compiles successfully, actual functionality on Android devices is not guaranteed. Please test thoroughly before using in production.
             
             ## 📚 Documentation
             

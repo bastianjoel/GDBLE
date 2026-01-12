@@ -1,4 +1,4 @@
 .kiro/
-.cargo
+.cargo/
 /target
 ._*
