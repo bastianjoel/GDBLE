@@ -1,0 +1,4 @@
+.kiro/
+.cargo/
+/target
+._*
