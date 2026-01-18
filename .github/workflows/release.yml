@@ -365,14 +365,10 @@ jobs:
 
             ##  What's Updated in This Release
 
-            - **Enhanced Device Discovery**: Now exposes complete advertising data from btleplug
-            - **Service UUIDs**: Access advertised service UUIDs during scanning for device filtering
-            - **Manufacturer Data**: Full manufacturer data exposure in scan results
-            - **Service Data**: Access service-specific data from advertisements
-            - **TX Power Level**: Signal strength information for better device selection
-            - **Improved DeviceInfo Structure**: All advertising data now available in `device_discovered` signal
-
-            This update enables advanced filtering scenarios, such as displaying only relevant BLE controllers (e.g., fitness game peripherals) instead of all nearby devices.
+            - Added Linux build/output support and fixed the addon .so filename for Godot.
+            - Fixed BLE characteristic reads and improved the demo flow (manual connect, service/characteristic lists, notify subscribe/unsubscribe).
+            - Fixed debug logging mode to avoid crashes and keep logs on the main thread.
+            - Switched to Godot-friendly VarDictionary and translated missing comments to English for clearer docs.
 
             ## 🌍 Platform Support
 
