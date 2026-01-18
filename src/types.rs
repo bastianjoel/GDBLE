@@ -252,7 +252,7 @@ impl BleError {
         }
     }
 
-    /// 获取错误代码
+    /// Return the symbolic error code
     pub fn error_code(&self) -> &str {
         match self {
             BleError::AdapterNotFound => "ADAPTER_NOT_FOUND",
@@ -276,7 +276,7 @@ impl BleError {
         }
     }
 
-    /// 判断错误是否可重试
+    /// Indicate whether the error is retryable
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
@@ -284,12 +284,12 @@ impl BleError {
         )
     }
 
-    /// 记录错误到 Godot 控制台
+    /// Log the error to the Godot console
     pub fn log_error(&self) {
         godot_error!("[BLE Error] {}: {}", self.error_code(), self.to_string());
     }
 
-    /// 记录警告到 Godot 控制台
+    /// Log a warning to the Godot console
     pub fn log_warning(&self) {
         godot_warn!("[BLE Warning] {}: {}", self.error_code(), self.to_string());
     }
