@@ -148,7 +148,7 @@ jobs:
               cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/libgdble.android.x86_64.so
               ;;
             linux)
-              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/libgdble.x86_64.so
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/libgdble.linux.x86_64.so
               ;;
             *)
               cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/${{ matrix.artifact_name }}
@@ -208,8 +208,8 @@ jobs:
           fi
 
           # Copy Linux binary
-          if [ -f artifacts/gdble-linux/libgdble.x86_64.so ]; then
-            cp artifacts/gdble-linux/libgdble.x86_64.so release/addons/gdble/libgdble.x86_64.so
+          if [ -f artifacts/gdble-linux/libgdble.linux.x86_64.so ]; then
+            cp artifacts/gdble-linux/libgdble.linux.x86_64.so release/addons/gdble/libgdble.linux.x86_64.so
           fi
 
           # Copy documentation
@@ -305,8 +305,8 @@ jobs:
           fi
 
           # Copy Linux binary
-          if [ -f artifacts/gdble-linux/libgdble.x86_64.so ]; then
-            cp artifacts/gdble-linux/libgdble.x86_64.so addons/gdble/libgdble.x86_64.so
+          if [ -f artifacts/gdble-linux/libgdble.linux.x86_64.so ]; then
+            cp artifacts/gdble-linux/libgdble.linux.x86_64.so addons/gdble/libgdble.linux.x86_64.so
             echo "✓ Updated Linux binary"
           fi
 
