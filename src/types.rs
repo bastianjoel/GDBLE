@@ -88,9 +88,9 @@ impl DeviceInfo {
         }
     }
 
-    /// Convert to a Godot Dictionary
-    pub fn to_dictionary(&self) -> Dictionary {
-        let mut dict = Dictionary::new();
+    /// Convert to a Godot VarDictionary
+    pub fn to_dictionary(&self) -> VarDictionary {
+        let mut dict = VarDictionary::new();
         dict.set("address", self.address.clone());
         
         if let Some(ref name) = self.name {
@@ -113,7 +113,7 @@ impl DeviceInfo {
         dict.set("services", services_array);
 
         // Manufacturer Data
-        let mut manuf_dict = Dictionary::new();
+        let mut manuf_dict = VarDictionary::new();
         for (id, data) in &self.manufacturer_data {
             let mut byte_array = PackedByteArray::new();
             for byte in data {
@@ -124,7 +124,7 @@ impl DeviceInfo {
         dict.set("manufacturer_data", manuf_dict);
 
         // Service Data
-        let mut service_data_dict = Dictionary::new();
+        let mut service_data_dict = VarDictionary::new();
         for (uuid_str, data) in &self.service_data {
             let mut byte_array = PackedByteArray::new();
             for byte in data {
@@ -316,9 +316,9 @@ impl AdapterInfo {
         Self { name, address }
     }
 
-    /// Convert to a Godot Dictionary
-    pub fn to_dictionary(&self) -> Dictionary {
-        let mut dict = Dictionary::new();
+    /// Convert to a Godot VarDictionary
+    pub fn to_dictionary(&self) -> VarDictionary {
+        let mut dict = VarDictionary::new();
         dict.set("name", self.name.clone());
         
         if let Some(ref address) = self.address {

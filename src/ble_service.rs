@@ -18,11 +18,11 @@ impl BleServiceInfo {
     }
 
     /// Convert to a Godot Dictionary
-    pub fn to_dictionary(&self) -> Dictionary {
-        let mut dict = Dictionary::new();
+    pub fn to_dictionary(&self) -> VarDictionary {
+        let mut dict = VarDictionary::new();
         dict.set("uuid", self.uuid.clone());
         
-        let chars_array: Array<Dictionary> = self.characteristics
+        let chars_array: Array<VarDictionary> = self.characteristics
             .iter()
             .map(|char_info| char_info.to_dictionary())
             .collect();

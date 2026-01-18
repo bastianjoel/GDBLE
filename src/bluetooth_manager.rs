@@ -148,14 +148,14 @@ impl BluetoothManager {
     /// # Parameters
     /// * `device_info` - Dictionary containing device information
     #[signal]
-    fn device_discovered(device_info: Dictionary);
+    fn device_discovered(device_info: VarDictionary);
 
     /// Signal emitted when a device's information is updated
     ///
     /// # Parameters
     /// * `device_info` - Dictionary containing updated device information
     #[signal]
-    fn device_updated(device_info: Dictionary);
+    fn device_updated(device_info: VarDictionary);
 
     /// Signal emitted when scanning starts
     #[signal]
@@ -328,10 +328,10 @@ impl BluetoothManager {
     /// A Dictionary containing adapter information (name, address)
     /// Returns an empty Dictionary if not initialized
     #[func]
-    pub fn get_adapter_info(&self) -> Dictionary {
+    pub fn get_adapter_info(&self) -> VarDictionary {
         if !self.is_initialized() {
             godot_warn!("BluetoothManager: Adapter not initialized");
-            return Dictionary::new();
+            return VarDictionary::new();
         }
 
         if let Some(ref _adapter) = self.adapter {
@@ -342,7 +342,7 @@ impl BluetoothManager {
             );
             info.to_dictionary()
         } else {
-            Dictionary::new()
+            VarDictionary::new()
         }
     }
 
@@ -470,7 +470,7 @@ impl BluetoothManager {
     /// # Returns
     /// An Array of Dictionaries, each containing device information
     #[func]
-    pub fn get_discovered_devices(&self) -> Array<Dictionary> {
+        pub fn get_discovered_devices(&self) -> Array<VarDictionary> {
         if !self.is_initialized() {
             godot_warn!("BluetoothManager: Adapter not initialized");
             return Array::new();

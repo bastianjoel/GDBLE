@@ -12,8 +12,8 @@ pub struct CharacteristicProperties {
 
 impl CharacteristicProperties {
     /// Convert to a Godot Dictionary
-    pub fn to_dictionary(&self) -> Dictionary {
-        let mut dict = Dictionary::new();
+    pub fn to_dictionary(&self) -> VarDictionary {
+        let mut dict = VarDictionary::new();
         dict.set("read", self.read);
         dict.set("write", self.write);
         dict.set("write_without_response", self.write_without_response);
@@ -37,8 +37,8 @@ impl BleCharacteristicInfo {
     }
 
     /// Convert to a Godot Dictionary
-    pub fn to_dictionary(&self) -> Dictionary {
-        let mut dict = Dictionary::new();
+    pub fn to_dictionary(&self) -> VarDictionary {
+        let mut dict = VarDictionary::new();
         dict.set("uuid", self.uuid.clone());
         dict.set("properties", self.properties.to_dictionary());
         dict
