@@ -80,6 +80,17 @@ impl INode for BluetoothManager {
             }
         }
 
+        // Poll device events (connection/service) on the main thread
+        let devices_to_poll: Vec<Gd<BleDevice>> = self
+            .devices
+            .lock()
+            .map(|d| d.values().cloned().collect())
+            .unwrap_or_default();
+
+        for mut dev in devices_to_poll {
+            dev.bind_mut().poll_events();
+        }
+
         // Collect discovered devices (real-time)
         let mut devices_to_emit = Vec::new();
         if let Some(ref rx_arc) = self.device_rx {

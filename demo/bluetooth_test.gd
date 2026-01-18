@@ -8,6 +8,7 @@ var connected_device: BleDevice = null
 var start_scan_button: Button
 var device_list: ItemList
 var service_list: ItemList
+var characteristic_list: ItemList
 var address_to_index: Dictionary = {}
 var adapter_ready := false
 var scanning := false
@@ -18,10 +19,12 @@ func _ready():
 	start_scan_button = $Button
 	device_list = $ItemList
 	service_list = $ServiceList
+	characteristic_list = $CharacteristicList
 	start_scan_button.disabled = true
 	start_scan_button.pressed.connect(_on_start_scan_pressed)
 	device_list.item_selected.connect(_on_item_selected)
 	service_list.item_selected.connect(_on_service_selected)
+	characteristic_list.item_selected.connect(_on_characteristic_selected)
 
 	# Create a BluetoothManager instance
 	bluetooth_manager = BluetoothManager.new()
@@ -39,7 +42,7 @@ func _ready():
 	# Initialize the Bluetooth adapter
 	print("Initializing Bluetooth adapter...")
 	# Disable verbose debug output
-	bluetooth_manager.set_debug_mode(true)
+	bluetooth_manager.set_debug_mode(false)
 	bluetooth_manager.initialize()
 
 func start_scanning():
@@ -47,6 +50,7 @@ func start_scanning():
 	device_list.clear()
 	address_to_index.clear()
 	service_list.clear()
+	characteristic_list.clear()
 	current_services.clear()
 	# Begin scanning (10 seconds)
 	bluetooth_manager.start_scan(10.0)
@@ -207,6 +211,7 @@ func _on_services_discovered(services: Array):
 	print("Received services array, size: ", services.size())
 	print("Services data: ", services)
 	service_list.clear()
+	characteristic_list.clear()
 	current_services = services.duplicate(true)
 	
 	if services.size() == 0:
@@ -347,11 +352,58 @@ func _on_service_selected(index: int):
 	print("\n=== Service selected ===")
 	print("Service UUID: ", service_uuid)
 	print("Characteristic count: ", characteristics.size())
+	characteristic_list.clear()
 	for characteristic in characteristics:
 		var char_uuid = characteristic.get("uuid", "")
 		var properties = characteristic.get("properties", {})
 		print("  Characteristic: ", char_uuid)
 		print("    Properties: read=", properties.get("read", false), ", write=", properties.get("write", false), ", write_no_resp=", properties.get("write_without_response", false), ", notify=", properties.get("notify", false), ", indicate=", properties.get("indicate", false))
+		var modes := []
+		if properties.get("read", false):
+			modes.append("read")
+		if properties.get("notify", false):
+			modes.append("notify")
+		if modes.size() == 0:
+			continue
+		var label := "%s (%s)" % [char_uuid, ",".join(modes)]
+		var cidx: int = characteristic_list.get_item_count()
+		characteristic_list.add_item(label)
+		characteristic_list.set_item_metadata(cidx, {
+			"service_uuid": service_uuid,
+			"char_uuid": char_uuid,
+			"can_read": properties.get("read", false),
+			"can_notify": properties.get("notify", false),
+		})
+		characteristic_list.set_item_tooltip(cidx, "Modes: %s" % ",".join(modes))
+
+func _on_characteristic_selected(index: int):
+	var meta = characteristic_list.get_item_metadata(index)
+	if meta == null:
+		print("No characteristic metadata for selected item")
+		return
+	if connected_device == null:
+		print("No connected device to read characteristic")
+		return
+	var service_uuid: String = meta.get("service_uuid", "")
+	var char_uuid: String = meta.get("char_uuid", "")
+	print("Reading/subscribing characteristic from list selection: ", service_uuid, " / ", char_uuid)
+	var can_read: bool = meta.get("can_read", false)
+	var can_notify: bool = meta.get("can_notify", false)
+	if can_read:
+		connected_device.read_characteristic(service_uuid, char_uuid)
+	if can_notify:
+		connected_device.subscribe_characteristic(service_uuid, char_uuid)
+	# Unsubscribe previous notify selection when switching
+	if connected_device:
+		for i in range(characteristic_list.get_item_count()):
+			if i == index:
+				continue
+			var prev_meta = characteristic_list.get_item_metadata(i)
+			if prev_meta and prev_meta.get("can_notify", false):
+				var prev_service = prev_meta.get("service_uuid", "")
+				var prev_char = prev_meta.get("char_uuid", "")
+				if prev_service != "" and prev_char != "":
+					connected_device.unsubscribe_characteristic(prev_service, prev_char)
 
 func _exit_tree():
 	# Clean up resources

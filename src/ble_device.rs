@@ -34,6 +34,21 @@ pub struct BleDevice {
     /// Connection state
     is_connected: Arc<Mutex<bool>>,
 
+    /// Last emitted connection state to avoid duplicate signals
+    last_signaled_connected: Arc<Mutex<bool>>,
+
+    /// Queued connection_failed messages to emit on main thread
+    pending_connection_failed: Arc<Mutex<Vec<GString>>>,
+
+    /// Queued services (plain Rust) to emit on main thread
+    pending_services_info: Arc<Mutex<Vec<Vec<BleServiceInfo>>>>,
+
+    /// Queued characteristic read results (char_uuid, data bytes)
+    pending_char_reads: Arc<Mutex<Vec<(String, Vec<u8>)>>>,
+
+    /// Queued notifications (char_uuid, data bytes)
+    pending_notifications: Arc<Mutex<Vec<(String, Vec<u8>)>>>,
+
     /// Discovered services
     services: Arc<Mutex<Vec<BleServiceInfo>>>,
 
@@ -108,9 +123,7 @@ impl BleDevice {
         let peripheral = self.peripheral.clone();
         let runtime = self.runtime.clone();
         let is_connected = self.is_connected.clone();
-
-        // Get instance ID for callback
-        let instance_id = self.base().instance_id();
+        let pending_fail = self.pending_connection_failed.clone();
 
         // Execute connection asynchronously
         runtime.spawn(async move {
@@ -129,29 +142,17 @@ impl BleDevice {
                 }
             };
 
-            // Handle result on main thread
+            // Handle result by queuing for main-thread poll
             match result {
                 Ok(_) => {
-                    ble_debug!("Attempting to emit connected signal for {}", address);
-                    if let Ok(mut obj) = Gd::<BleDevice>::try_from_instance_id(instance_id) {
-                        ble_debug!("Found device instance, calling _on_connect_success");
-                        obj.call_deferred("_on_connect_success", &[]);
-                    } else {
-                        ble_error!("Failed to get device instance for callback");
-                    }
+                    ble_debug!("Queued connected state for {}", address);
                 }
                 Err(error) => {
                     ble_debug!("Connection failed for device: {}", address);
                     error.log_error();
-                    
-                    if let Ok(mut obj) = Gd::<BleDevice>::try_from_instance_id(instance_id) {
-                        ble_debug!("Found device instance, calling _on_connect_failed");
-                        obj.call_deferred(
-                            "_on_connect_failed",
-                            &[error.to_gstring().to_variant()],
-                        );
-                    } else {
-                        ble_error!("Failed to get device instance for error callback");
+
+                    if let Ok(mut pending) = pending_fail.lock() {
+                        pending.push(error.to_gstring());
                     }
                 }
             }
@@ -256,7 +257,8 @@ impl BleDevice {
         let peripheral = self.peripheral.clone();
         let runtime = self.runtime.clone();
         let services_cache = self.services.clone();
-        let instance_id = self.base().instance_id();
+        let pending_services = self.pending_services_info.clone();
+        let pending_fail = self.pending_connection_failed.clone();
 
         // Execute service discovery asynchronously
         runtime.spawn(async move {
@@ -307,38 +309,104 @@ impl BleDevice {
                     // Cache the services
                     *services_cache.lock().unwrap() = service_infos.clone();
 
-                    // Convert to array of dictionaries
-                    let services_array: Array<VarDictionary> =
-                        service_infos.iter().map(|s| s.to_dictionary()).collect();
-
-                    // Emit signal on main thread
-                    if let Ok(mut obj) = Gd::<BleDevice>::try_from_instance_id(instance_id) {
-                        obj.call_deferred(
-                            "_on_services_discovered",
-                            &[services_array.to_variant()],
-                        );
+                    // Queue plain service infos for main-thread emission
+                    if let Ok(mut queue) = pending_services.lock() {
+                        ble_debug!("Queueing services_discovered ({} services)", service_infos.len());
+                        queue.push(service_infos);
                     } else {
-                        ble_error!("Failed to get device instance for services_discovered callback");
+                        ble_error!("Failed to lock pending_services queue");
                     }
                 }
                 Err(error) => {
                     error.log_error();
 
-                    // Call back to main thread to emit signal
-                    if let Ok(mut obj) = Gd::<BleDevice>::try_from_instance_id(instance_id) {
-                        obj.call_deferred(
-                            "_on_operation_failed",
-                            &[
-                                GString::from("discover_services").to_variant(),
-                                error.to_gstring().to_variant(),
-                            ],
-                        );
-                    } else {
-                        ble_error!("Failed to get device instance for error callback");
+                    // Queue failure for main-thread emission
+                    if let Ok(mut pending) = pending_fail.lock() {
+                        pending.push(error.to_gstring());
                     }
                 }
             }
         });
+    }
+
+    /// Poll and emit queued events on the Godot main thread
+    #[func]
+    pub fn poll_events(&mut self) {
+        // Connection state transitions
+        let (emit_connected, emit_disconnected) = {
+            let is_conn = *self.is_connected.lock().unwrap();
+            let mut last = self.last_signaled_connected.lock().unwrap();
+            let emit_connected = is_conn && !*last;
+            let emit_disconnected = !is_conn && *last;
+            if emit_connected {
+                *last = true;
+            }
+            if emit_disconnected {
+                *last = false;
+            }
+            (emit_connected, emit_disconnected)
+        };
+
+        if emit_connected {
+            ble_debug!("Emitting connected signal (poll)");
+            self.base_mut().emit_signal("connected", &[]);
+        }
+        if emit_disconnected {
+            ble_debug!("Emitting disconnected signal (poll)");
+            self.base_mut().emit_signal("disconnected", &[]);
+        }
+
+        // Connection failures
+        let fails: Vec<GString> = {
+            let mut queue = self.pending_connection_failed.lock().unwrap();
+            queue.drain(..).collect()
+        };
+        for msg in fails {
+            ble_debug!("Emitting connection_failed (poll)");
+            self.base_mut()
+                .emit_signal("connection_failed", &[msg.to_variant()]);
+        }
+
+        // Services discovered
+        let services: Vec<Vec<BleServiceInfo>> = {
+            let mut queue = self.pending_services_info.lock().unwrap();
+            queue.drain(..).collect()
+        };
+        for svc_infos in services {
+            let services_array: Array<VarDictionary> =
+                svc_infos.iter().map(|s| s.to_dictionary()).collect();
+            ble_debug!("Emitting services_discovered (poll)");
+            self.base_mut()
+                .emit_signal("services_discovered", &[services_array.to_variant()]);
+        }
+
+        // Characteristic reads
+        let reads: Vec<(String, Vec<u8>)> = {
+            let mut queue = self.pending_char_reads.lock().unwrap();
+            queue.drain(..).collect()
+        };
+        for (char_uuid, data) in reads {
+            let packed = PackedByteArray::from(&data[..]);
+            ble_debug!("Emitting characteristic_read (poll) for {}", char_uuid);
+            self.base_mut().emit_signal(
+                "characteristic_read",
+                &[GString::from(char_uuid.as_str()).to_variant(), packed.to_variant()],
+            );
+        }
+
+        // Notifications
+        let notifies: Vec<(String, Vec<u8>)> = {
+            let mut queue = self.pending_notifications.lock().unwrap();
+            queue.drain(..).collect()
+        };
+        for (char_uuid, data) in notifies {
+            let packed = PackedByteArray::from(&data[..]);
+            ble_debug!("Emitting characteristic_notified (poll) for {}", char_uuid);
+            self.base_mut().emit_signal(
+                "characteristic_notified",
+                &[GString::from(char_uuid.as_str()).to_variant(), packed.to_variant()],
+            );
+        }
     }
 
     /// Get the list of discovered services
@@ -391,7 +459,7 @@ impl BleDevice {
 
         let peripheral = self.peripheral.clone();
         let runtime = self.runtime.clone();
-        let instance_id = self.base().instance_id();
+        let pending_reads = self.pending_char_reads.clone();
         let service_uuid_str = service_uuid.to_string();
         let char_uuid_str = char_uuid.to_string();
 
@@ -421,40 +489,16 @@ impl BleDevice {
                                 char_uuid_str
                             );
                             ble_debug!("Read data: {:?}", data);
-
-                            // Convert Vec<u8> to PackedByteArray
-                            let packed_data = PackedByteArray::from(&data[..]);
-
-                            // Call back to main thread to emit signal
-                            if let Ok(mut obj) = Gd::<BleDevice>::try_from_instance_id(instance_id)
-                            {
-                                obj.call_deferred(
-                                    "_on_characteristic_read",
-                                    &[
-                                        GString::from(&char_uuid_str).to_variant(),
-                                        packed_data.to_variant(),
-                                    ],
-                                );
-                            } else {
-                                ble_error!("Failed to get device instance for read callback");
+                            if let Ok(mut queue) = pending_reads.lock() {
+                                queue.push((char_uuid_str.clone(), data));
                             }
                         }
                         Err(e) => {
                             let error = BleError::ReadFailed(e.to_string());
                             error.log_error();
 
-                            // Call back to main thread to emit signal
-                            if let Ok(mut obj) = Gd::<BleDevice>::try_from_instance_id(instance_id)
-                            {
-                                obj.call_deferred(
-                                    "_on_operation_failed",
-                                    &[
-                                        GString::from("read_characteristic").to_variant(),
-                                        error.to_gstring().to_variant(),
-                                    ],
-                                );
-                            } else {
-                                ble_error!("Failed to get device instance for error callback");
+                            if let Ok(mut queue) = pending_reads.lock() {
+                                queue.push((char_uuid_str.clone(), Vec::new()));
                             }
                         }
                     }
@@ -466,18 +510,8 @@ impl BleDevice {
                     char_uuid_str, service_uuid_str
                 ));
                 error.log_error();
-
-                // Call back to main thread to emit signal
-                if let Ok(mut obj) = Gd::<BleDevice>::try_from_instance_id(instance_id) {
-                    obj.call_deferred(
-                        "_on_operation_failed",
-                        &[
-                            GString::from("read_characteristic").to_variant(),
-                            error.to_gstring().to_variant(),
-                        ],
-                    );
-                } else {
-                    ble_error!("Failed to get device instance for error callback");
+                if let Ok(mut queue) = pending_reads.lock() {
+                    queue.push((char_uuid_str.clone(), Vec::new()));
                 }
             }
         }
@@ -721,6 +755,7 @@ impl BleDevice {
         let service_uuid_str = service_uuid.to_string();
         let char_uuid_str = char_uuid.to_string();
         let subscribed_chars = self.subscribed_characteristics.clone();
+        let pending_notifications = self.pending_notifications.clone();
 
         // Find the characteristic first (synchronous)
         let characteristics = peripheral.characteristics();
@@ -756,6 +791,7 @@ impl BleDevice {
                             // Set up notification handler
                             let peripheral_clone = peripheral.clone();
                             let char_uuid_for_handler = char_uuid_str.clone();
+                            let pending_notifications = pending_notifications.clone();
 
                             tokio::spawn(async move {
                                 ble_debug!("Starting notification handler for {}", char_uuid_for_handler);
@@ -776,23 +812,9 @@ impl BleDevice {
                                                 notification.value.len()
                                             );
 
-                                            let packed_data =
-                                                PackedByteArray::from(&notification.value[..]);
-
-                                            // Call back to main thread to emit signal
-                                            if let Ok(mut obj) =
-                                                Gd::<BleDevice>::try_from_instance_id(instance_id)
-                                            {
-                                                obj.call_deferred(
-                                                    "_on_characteristic_notified",
-                                                    &[
-                                                        GString::from(&char_uuid_for_handler)
-                                                            .to_variant(),
-                                                        packed_data.to_variant(),
-                                                    ],
-                                                );
-                                            } else {
-                                                ble_error!("Failed to get device instance for notification callback");
+                                            // Queue notification for main-thread emission
+                                            if let Ok(mut queue) = pending_notifications.lock() {
+                                                queue.push((char_uuid_for_handler.clone(), notification.value.clone()));
                                             }
                                         }
                                     }
@@ -1017,6 +1039,11 @@ impl BleDevice {
             address: GString::from(&address),
             name: GString::from(&name),
             is_connected: Arc::new(Mutex::new(false)),
+            last_signaled_connected: Arc::new(Mutex::new(false)),
+            pending_connection_failed: Arc::new(Mutex::new(Vec::new())),
+            pending_services_info: Arc::new(Mutex::new(Vec::new())),
+            pending_char_reads: Arc::new(Mutex::new(Vec::new())),
+            pending_notifications: Arc::new(Mutex::new(Vec::new())),
             services: Arc::new(Mutex::new(Vec::new())),
             subscribed_characteristics: Arc::new(Mutex::new(HashSet::new())),
         })
