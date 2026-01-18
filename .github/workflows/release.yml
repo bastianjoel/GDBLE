@@ -26,34 +26,62 @@ jobs:
             os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: gdble.dll
-          
+
           - platform: macos
             os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: libgdble.dylib
-          
+
           - platform: macos-arm
             os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: libgdble.dylib
-          
+
           - platform: linux
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: libgdble.so
 
+          - platform: android-arm64
+            os: ubuntu-latest
+            target: aarch64-linux-android
+            artifact_name: libgdble.so
+
+          - platform: android-x86_64
+            os: ubuntu-latest
+            target: x86_64-linux-android
+            artifact_name: libgdble.so
+
+          # - platform: android-armv7
+          #   os: ubuntu-latest
+          #   target: armv7-linux-androideabi
+          #   artifact_name: libgdble.so
+          #   # Note: Android ARMv7 is not supported due to godot-ffi compatibility issues
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install Linux BLE deps
-        if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libbluetooth-dev pkg-config libudev-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Install Linux BLE deps
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libbluetooth-dev pkg-config libudev-dev
+
+      - name: Setup Android NDK
+        if: startsWith(matrix.platform, 'android')
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r25c
+
+      - name: Install cross-compilation tools for Android
+        if: startsWith(matrix.platform, 'android')
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
+          echo "ANDROID_NDK=$ANDROID_NDK_HOME" >> $GITHUB_ENV
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -74,21 +102,65 @@ jobs:
           path: target
           key: ${{ runner.os }}-${{ matrix.target }}-target-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build release
+      - name: Build release for Android
+        if: startsWith(matrix.platform, 'android')
+        env:
+          CC: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}21-clang
+          CXX: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}21-clang++
+          AR: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
+          CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android21-clang
+          RUSTFLAGS: -C link-arg=-L${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${{ matrix.target }}/21 -C link-arg=-L${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/lib64
+        run: |
+          mkdir -p .cargo
+          cat > .cargo/config.toml << EOF
+          [target.${{ matrix.target }}]
+          ar = "${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          linker = "${{ env.ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}21-clang"
+          EOF
+          cargo build --release --target ${{ matrix.target }} \
+            --no-default-features \
+            --features "android"
+
+      - name: Build release for other platforms
+        if: "!startsWith(matrix.platform, 'android')"
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Prepare artifact
         shell: bash
         run: |
           mkdir -p artifacts/${{ matrix.platform }}
-          # Copy from target-specific directory
-          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/${{ matrix.artifact_name }}
+          
+          # Rename and copy with platform and architecture suffix
+          case "${{ matrix.platform }}" in
+            windows)
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/gdble.windows.x86_64.dll
+              ;;
+            macos)
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/libgdble.macos.x86_64.dylib
+              ;;
+            macos-arm)
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/libgdble.macos.arm64.dylib
+              ;;
+            android-arm64)
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/libgdble.android.arm64.so
+              ;;
+            android-x86_64)
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/libgdble.android.x86_64.so
+              ;;
+            linux)
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/libgdble.x86_64.so
+              ;;
+            *)
+              cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.platform }}/${{ matrix.artifact_name }}
+              ;;
+          esac
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: gdble-${{ matrix.platform }}
-          path: artifacts/${{ matrix.platform }}/${{ matrix.artifact_name }}
+          path: artifacts/${{ matrix.platform }}/*
           retention-days: 7
 
   package:
@@ -112,37 +184,33 @@ jobs:
           cp demo/addons/gdble/gdble.gdextension release/addons/gdble/
           
           # Copy Windows binary
-          if [ -f artifacts/gdble-windows/gdble.dll ]; then
-            cp artifacts/gdble-windows/gdble.dll release/addons/gdble/
-          fi
-          
-          # Copy Linux binary
-          if [ -f artifacts/gdble-linux/libgdble.so ]; then
-            cp artifacts/gdble-linux/libgdble.so release/addons/gdble/
+          if [ -f artifacts/gdble-windows/gdble.windows.x86_64.dll ]; then
+            cp artifacts/gdble-windows/gdble.windows.x86_64.dll release/addons/gdble/gdble.windows.x86_64.dll
           fi
 
           # Copy macOS x86_64 binary
-          if [ -f artifacts/gdble-macos/libgdble.dylib ]; then
-            cp artifacts/gdble-macos/libgdble.dylib release/addons/gdble/libgdble.x86_64.dylib
+          if [ -f artifacts/gdble-macos/libgdble.macos.x86_64.dylib ]; then
+            cp artifacts/gdble-macos/libgdble.macos.x86_64.dylib release/addons/gdble/libgdble.macos.x86_64.dylib
           fi
-          
+
           # Copy macOS ARM binary
-          if [ -f artifacts/gdble-macos-arm/libgdble.dylib ]; then
-            cp artifacts/gdble-macos-arm/libgdble.dylib release/addons/gdble/libgdble.arm64.dylib
+          if [ -f artifacts/gdble-macos-arm/libgdble.macos.arm64.dylib ]; then
+            cp artifacts/gdble-macos-arm/libgdble.macos.arm64.dylib release/addons/gdble/libgdble.macos.arm64.dylib
           fi
-          
-          # Create universal macOS binary if both architectures exist
-          if [ -f release/addons/gdble/libgdble.x86_64.dylib ] && [ -f release/addons/gdble/libgdble.arm64.dylib ]; then
-            lipo -create \
-              release/addons/gdble/libgdble.x86_64.dylib \
-              release/addons/gdble/libgdble.arm64.dylib \
-              -output release/addons/gdble/libgdble.dylib
-            rm release/addons/gdble/libgdble.x86_64.dylib
-            rm release/addons/gdble/libgdble.arm64.dylib
-          elif [ -f release/addons/gdble/libgdble.x86_64.dylib ]; then
-            mv release/addons/gdble/libgdble.x86_64.dylib release/addons/gdble/libgdble.dylib
-          elif [ -f release/addons/gdble/libgdble.arm64.dylib ]; then
-            mv release/addons/gdble/libgdble.arm64.dylib release/addons/gdble/libgdble.dylib
+
+          # Copy Android ARM64 binary
+          if [ -f artifacts/gdble-android-arm64/libgdble.android.arm64.so ]; then
+            cp artifacts/gdble-android-arm64/libgdble.android.arm64.so release/addons/gdble/libgdble.android.arm64.so
+          fi
+
+          # Copy Android x86_64 binary
+          if [ -f artifacts/gdble-android-x86_64/libgdble.android.x86_64.so ]; then
+            cp artifacts/gdble-android-x86_64/libgdble.android.x86_64.so release/addons/gdble/libgdble.android.x86_64.so
+          fi
+
+          # Copy Linux binary
+          if [ -f artifacts/gdble-linux/libgdble.x86_64.so ]; then
+            cp artifacts/gdble-linux/libgdble.x86_64.so release/addons/gdble/libgdble.x86_64.so
           fi
           
           # Copy documentation
@@ -210,42 +278,37 @@ jobs:
           fi
           
           # Copy Windows binary
-          if [ -f artifacts/gdble-windows/gdble.dll ]; then
-            cp artifacts/gdble-windows/gdble.dll addons/gdble/
+          if [ -f artifacts/gdble-windows/gdble.windows.x86_64.dll ]; then
+            cp artifacts/gdble-windows/gdble.windows.x86_64.dll addons/gdble/gdble.windows.x86_64.dll
             echo "✓ Updated Windows binary"
-          fi
-
-          # Copy Linux binary
-          if [ -f artifacts/gdble-linux/libgdble.so ]; then
-            cp artifacts/gdble-linux/libgdble.so addons/gdble/
-            echo "✓ Updated Linux binary"
           fi
           
           # Copy macOS binaries for universal binary creation
-          if [ -f artifacts/gdble-macos/libgdble.dylib ]; then
-            cp artifacts/gdble-macos/libgdble.dylib addons/gdble/libgdble.x86_64.dylib
+          if [ -f artifacts/gdble-macos/libgdble.macos.x86_64.dylib ]; then
+            cp artifacts/gdble-macos/libgdble.macos.x86_64.dylib addons/gdble/libgdble.macos.x86_64.dylib
             echo "✓ Downloaded macOS x86_64 binary"
           fi
-          
-          if [ -f artifacts/gdble-macos-arm/libgdble.dylib ]; then
-            cp artifacts/gdble-macos-arm/libgdble.dylib addons/gdble/libgdble.arm64.dylib
+
+          if [ -f artifacts/gdble-macos-arm/libgdble.macos.arm64.dylib ]; then
+            cp artifacts/gdble-macos-arm/libgdble.macos.arm64.dylib addons/gdble/libgdble.macos.arm64.dylib
             echo "✓ Downloaded macOS ARM64 binary"
           fi
-          
-          # Create universal binary if both architectures exist
-          if [ -f addons/gdble/libgdble.x86_64.dylib ] && [ -f addons/gdble/libgdble.arm64.dylib ]; then
-            lipo -create \
-              addons/gdble/libgdble.x86_64.dylib \
-              addons/gdble/libgdble.arm64.dylib \
-              -output addons/gdble/libgdble.dylib
-            rm addons/gdble/libgdble.x86_64.dylib addons/gdble/libgdble.arm64.dylib
-            echo "✓ Created universal macOS binary"
-          elif [ -f addons/gdble/libgdble.x86_64.dylib ]; then
-            mv addons/gdble/libgdble.x86_64.dylib addons/gdble/libgdble.dylib
-            echo "✓ Using x86_64 binary"
-          elif [ -f addons/gdble/libgdble.arm64.dylib ]; then
-            mv addons/gdble/libgdble.arm64.dylib addons/gdble/libgdble.dylib
-            echo "✓ Using ARM64 binary"
+
+          # Copy Android binaries
+          if [ -f artifacts/gdble-android-arm64/libgdble.android.arm64.so ]; then
+            cp artifacts/gdble-android-arm64/libgdble.android.arm64.so addons/gdble/libgdble.android.arm64.so
+            echo "✓ Downloaded Android ARM64 binary"
+          fi
+
+          if [ -f artifacts/gdble-android-x86_64/libgdble.android.x86_64.so ]; then
+            cp artifacts/gdble-android-x86_64/libgdble.android.x86_64.so addons/gdble/libgdble.android.x86_64.so
+            echo "✓ Downloaded Android x86_64 binary"
+          fi
+
+          # Copy Linux binary
+          if [ -f artifacts/gdble-linux/libgdble.x86_64.so ]; then
+            cp artifacts/gdble-linux/libgdble.x86_64.so addons/gdble/libgdble.x86_64.so
+            echo "✓ Updated Linux binary"
           fi
 
       - name: Commit and push binaries
@@ -301,40 +364,27 @@ jobs:
           body: |
             # GDBLE ${{ steps.get_version.outputs.version }}
             
-            ## 🎉 What's New
+            ##  What's Updated in This Release
             
-            A modern Bluetooth Low Energy (BLE) plugin for Godot 4, completely rewritten in Rust.
+            - **Enhanced Device Discovery**: Now exposes complete advertising data from btleplug
+            - **Service UUIDs**: Access advertised service UUIDs during scanning for device filtering
+            - **Manufacturer Data**: Full manufacturer data exposure in scan results
+            - **Service Data**: Access service-specific data from advertisements
+            - **TX Power Level**: Signal strength information for better device selection
+            - **Improved DeviceInfo Structure**: All advertising data now available in `device_discovered` signal
             
-            ### ✨ Key Features
-            
-            - **Real-time Device Discovery**: Devices appear instantly as they're found during scanning
-            - **Async Non-blocking**: All operations run asynchronously without affecting game frame rate
-            - **Modern Architecture**: Built with Rust and btleplug for excellent performance and stability
-            - **Signal-driven API**: Clean event system using Godot signals
-            - **Debug Mode**: Optional detailed logging for development and troubleshooting
-            - **Multi-device Support**: Connect and manage multiple BLE devices simultaneously
-            
-            ### 🔧 Core Functionality
-            
-            - 🔍 Device scanning with real-time discovery
-            - �  Device connection management
-            - 🔎 Automatic service and characteristic discovery
-            - 📖 Read characteristic values
-            - ✍️ Write data (with/without response)
-            - 🔔 Subscribe to notifications for real-time data
-            
-            ## 📦 Installation
-            
-            1. Download `gdble-release.zip`
-            2. Extract to your Godot project's `addons` folder
-            3. Restart Godot Editor
-            4. Start using GDBLE in your project!
+            This update enables advanced filtering scenarios, such as displaying only relevant BLE controllers (e.g., fitness game peripherals) instead of all nearby devices.
             
             ## 🌍 Platform Support
             
             - ✅ **Windows** 10+ (x86_64)
-            - ✅ **macOS** 10.15+ (Universal Binary: Intel + Apple Silicon)
-            - 🚧 **Linux** (In Development)
+            - ✅ **macOS** 10.15+ (x86_64, ARM64)
+            - ✅ **Linux** (x86_64)
+            - ⚠️ **Android** 5.0+ (API 21+, ARM64, x86_64) - Not tested, may not work correctly
+            
+            > ⚠️ **Note**: Android ARMv7 (32-bit) is not supported due to godot-ffi compatibility issues. Please use ARM64 or x86_64 architectures for Android builds.
+            > 
+            > ⚠️ **Important**: Android support in this release has not been tested. While the code compiles successfully, actual functionality on Android devices is not guaranteed. Please test thoroughly before using in production.
             
             ## 📚 Documentation
             
@@ -342,31 +392,7 @@ jobs:
             - 📖 [English Documentation](https://github.com/Fantety/GodotBLE/blob/master/README_EN.md)
             - 🎮 [Demo Guide](https://github.com/Fantety/GodotBLE/blob/master/demo/DEMO_GUIDE.md)
             - 🚀 [Quick Start](https://github.com/Fantety/GodotBLE/blob/master/QUICK_START_RELEASE.md)
-            
-            ## 🔗 Links
-            
-            - [GitHub Repository](https://github.com/Fantety/GodotBLE)
-            - [Godot Asset Library](https://godotengine.org/asset-library/asset/3439)
-            - [Report Issues](https://github.com/Fantety/GodotBLE/issues)
-            - [Submit Pull Requests](https://github.com/Fantety/GodotBLE/pulls)
-            
-            ## 💡 Quick Example
-            
-            ```gdscript
-            var bluetooth_manager = BluetoothManager.new()
-            add_child(bluetooth_manager)
-            
-            bluetooth_manager.device_discovered.connect(func(info):
-                print("Found: ", info.get("name"))
-            )
-            
-            bluetooth_manager.initialize()
-            bluetooth_manager.start_scan(10.0)
-            ```
-            
-            ## 🙏 Acknowledgments
-            
-            Built with [btleplug](https://github.com/deviceplug/btleplug) and [godot-rust](https://github.com/godot-rust/gdext)
+            - 🤖 [Android Build Guide](https://github.com/Fantety/GodotBLE/blob/master/ANDROID_BUILD.md)
             
             ---
             

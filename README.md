@@ -76,7 +76,12 @@ GDBLE 是一个为 Godot 4 设计的蓝牙低功耗（BLE）插件，使用 Rust
 | ------- | --- | ----------- |
 | Windows | ✅   | Windows 10+ |
 | macOS   | ✅   | macOS 10.15+ |
+| Android | ✅   | Android 5.0+ (API 21+) |
 | Linux   | 🚧  | 开发中         |
+
+> 💡 **Android 用户**: 请查看 [Android 构建指南](ANDROID_BUILD.md) 了解详细的配置和使用说明。
+> 
+> ⚠️ **注意**: Android ARMv7 (32位) 架构暂不支持，请使用 ARM64 或 x86_64 架构。
 
 ---
 
@@ -94,6 +99,7 @@ GDBLE 是一个为 Godot 4 设计的蓝牙低功耗（BLE）插件，使用 Rust
 2. 解压到你的 Godot 项目的 `addons` 文件夹
 3. 确保文件结构如下：
 
+**桌面平台 (Windows/macOS)**:
 ```
 your_project/
 ├── addons/
@@ -101,6 +107,24 @@ your_project/
 │       ├── gdble.gdextension
 │       └── gdble.dll (Windows) 或 libgdble.dylib (macOS)
 ```
+
+**Android 平台**:
+```
+your_project/
+├── addons/
+│   └── gdble/
+│       ├── gdble.gdextension
+│       └── libgdble.so (ARM64 或 ARMv7)
+├── res/
+│   └── android/
+│       ├── AndroidManifest.xml
+│       └── gradle.properties
+```
+
+> ⚠️ **Android 注意事项**: 
+> - 需要配置 AndroidManifest.xml 和 gradle.properties
+> - 在导出时需要请求运行时权限
+> - 详细说明请参考 [Android 构建指南](ANDROID_BUILD.md)
 
 4. 重启 Godot 编辑器
 
@@ -125,7 +149,26 @@ func _ready():
     bluetooth_manager.device_discovered.connect(_on_device_discovered)
     bluetooth_manager.scan_stopped.connect(_on_scan_stopped)
     
-    # 3. 初始化蓝牙适配器
+    # 3. Android 平台需要请求权限
+    if OS.get_name() == "Android":
+        _request_android_permissions()
+    else:
+        # 4. 初始化蓝牙适配器
+        bluetooth_manager.initialize()
+
+func _request_android_permissions():
+    var permissions = [
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION"
+    ]
+    
+    for permission in permissions:
+        if not OS.request_permission(permission):
+            print("权限被拒绝: ", permission)
+            return
+    
+    await get_tree().create_timer(1.0).timeout
     bluetooth_manager.initialize()
 
 func _on_adapter_initialized(success: bool, error: String):

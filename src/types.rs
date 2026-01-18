@@ -60,15 +60,31 @@ pub struct DeviceInfo {
     pub address: String,
     pub name: Option<String>,
     pub rssi: Option<i16>,
+    pub services: Vec<String>,
+    pub manufacturer_data: std::collections::HashMap<u16, Vec<u8>>,
+    pub service_data: std::collections::HashMap<String, Vec<u8>>,
+    pub tx_power_level: Option<i16>,
 }
 
 impl DeviceInfo {
     /// 创建新的设备信息
-    pub fn new(address: String, name: Option<String>, rssi: Option<i16>) -> Self {
+    pub fn new(
+        address: String, 
+        name: Option<String>, 
+        rssi: Option<i16>,
+        services: Vec<String>,
+        manufacturer_data: std::collections::HashMap<u16, Vec<u8>>,
+        service_data: std::collections::HashMap<String, Vec<u8>>,
+        tx_power_level: Option<i16>,
+    ) -> Self {
         Self {
             address,
             name,
             rssi,
+            services,
+            manufacturer_data,
+            service_data,
+            tx_power_level,
         }
     }
 
@@ -87,6 +103,42 @@ impl DeviceInfo {
             dict.set("rssi", rssi);
         } else {
             dict.set("rssi", Variant::nil());
+        }
+
+        // Services
+        let mut services_array: Array<GString> = Array::new();
+        for service in &self.services {
+            services_array.push(&GString::from(service));
+        }
+        dict.set("services", services_array);
+
+        // Manufacturer Data
+        let mut manuf_dict = Dictionary::new();
+        for (id, data) in &self.manufacturer_data {
+            let mut byte_array = PackedByteArray::new();
+            for byte in data {
+                byte_array.push(*byte);
+            }
+            manuf_dict.set(*id, byte_array);
+        }
+        dict.set("manufacturer_data", manuf_dict);
+
+        // Service Data
+        let mut service_data_dict = Dictionary::new();
+        for (uuid_str, data) in &self.service_data {
+            let mut byte_array = PackedByteArray::new();
+            for byte in data {
+                byte_array.push(*byte);
+            }
+            service_data_dict.set(GString::from(uuid_str), byte_array);
+        }
+        dict.set("service_data", service_data_dict);
+
+        // TX Power Level
+        if let Some(tx) = self.tx_power_level {
+            dict.set("tx_power_level", tx);
+        } else {
+            dict.set("tx_power_level", Variant::nil());
         }
         
         dict
