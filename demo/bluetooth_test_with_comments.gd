@@ -1,27 +1,27 @@
 extends Node
 
 # ============================================================================
-# Bluetooth 插件测试脚本 - 详细注释版
+# Bluetooth plugin test script - detailed annotations
 # ============================================================================
 # 
-# 本脚本演示如何使用 GDBLE 插件进行蓝牙设备操作：
-# 1. 初始化蓝牙适配器
-# 2. 扫描附近的 BLE 设备
-# 3. 连接到目标设备（Fantety11）
-# 4. 发现设备的服务和特征
-# 5. 订阅 fff1 特征的通知（接收数据）
-# 6. 写入数据到 fff2 特征（发送数据）
+# This script demonstrates how to use the GDBLE plugin for Bluetooth tasks:
+# 1. Initialize the Bluetooth adapter
+# 2. Scan nearby BLE devices
+# 3. Connect to the target device (Fantety11)
+# 4. Discover services and characteristics
+# 5. Subscribe to fff1 notifications (receive data)
+# 6. Write data to the fff2 characteristic (send data)
 #
 # ============================================================================
 
 var bluetooth_manager: BluetoothManager
 var connected_device: BleDevice = null
 
-# fff0 服务的 UUID
+# UUID for the fff0 service
 const FFF0_SERVICE = "0000fff0-0000-1000-8000-00805f9b34fb"
-# fff1 特征的 UUID（用于接收通知）
+# UUID for the fff1 characteristic (notifications)
 const FFF1_CHARACTERISTIC = "0000fff1-0000-1000-8000-00805f9b34fb"
-# fff2 特征的 UUID（用于写入数据）
+# UUID for the fff2 characteristic (writes)
 const FFF2_CHARACTERISTIC = "0000fff2-0000-1000-8000-00805f9b34fb"
 
 func _ready():
@@ -34,22 +34,22 @@ func _ready():
 	print("  5. Write data to fff2 characteristic")
 	print()
 	
-	# 步骤 1: 创建 BluetoothManager 实例
+	# Step 1: Create the BluetoothManager instance
 	bluetooth_manager = BluetoothManager.new()
 	add_child(bluetooth_manager)
 	
-	# 步骤 2: 连接所有必要的信号
+	# Step 2: Connect all required signals
 	setup_signals()
 	
-	# 步骤 3: 初始化蓝牙适配器
+	# Step 3: Initialize the Bluetooth adapter
 	print("Initializing Bluetooth adapter...")
-	# 关闭调试模式以保持输出清洁（开发时可设为 true）
+	# Turn off debug chatter (set to true during development if needed)
 	bluetooth_manager.set_debug_mode(false)
 	bluetooth_manager.initialize()
 
 func setup_signals():
-	"""连接所有蓝牙管理器和设备的信号"""
-	# BluetoothManager 信号
+	"""Connect all Bluetooth manager and device signals"""
+	# BluetoothManager signals
 	bluetooth_manager.adapter_initialized.connect(_on_adapter_initialized)
 	bluetooth_manager.device_discovered.connect(_on_device_discovered)
 	bluetooth_manager.device_connected.connect(_on_device_connected)
@@ -59,23 +59,23 @@ func setup_signals():
 	bluetooth_manager.error_occurred.connect(_on_error_occurred)
 
 func start_scanning():
-	"""开始扫描附近的 BLE 设备"""
+	"""Start scanning nearby BLE devices"""
 	print("\n=== Starting BLE Device Scan ===")
-	# 扫描 10 秒
+	# Scan for 10 seconds
 	bluetooth_manager.start_scan(10.0)
 
 func connect_to_device(address: String):
-	"""连接到指定地址的 BLE 设备"""
+	"""Connect to the BLE device at the given address"""
 	print("\n=== Connecting to Device ===")
 	print("  Address: ", address)
 	
-	# 通过 BluetoothManager 创建设备实例
+	# Create the device instance through BluetoothManager
 	var device = bluetooth_manager.connect_device(address)
 	if device:
 		print("  Device instance created")
 		connected_device = device
 		
-		# 连接设备的所有信号
+		# Wire up all device signals
 		print("  Setting up device signals...")
 		device.connected.connect(_on_device_connected_signal)
 		device.disconnected.connect(_on_device_disconnected_signal)
@@ -86,14 +86,14 @@ func connect_to_device(address: String):
 		device.characteristic_notified.connect(_on_characteristic_notified)
 		device.operation_failed.connect(_on_operation_failed)
 		
-		# 开始异步连接
+		# Begin the asynchronous connection
 		print("  Initiating connection...")
 		device.connect_async()
 	else:
 		print("  ERROR: Failed to create device instance")
 
 func discover_services():
-	"""发现已连接设备的所有服务和特征"""
+	"""Discover services and characteristics on the connected device"""
 	if connected_device:
 		print("\n=== Discovering Services ===")
 		print("  Device: ", connected_device.get_name())
@@ -104,32 +104,32 @@ func discover_services():
 		print("ERROR: No connected device")
 
 # ============================================================================
-# 信号回调函数 - BluetoothManager
+# Signal callbacks - BluetoothManager
 # ============================================================================
 
 func _on_adapter_initialized(success: bool, error: String):
-	"""蓝牙适配器初始化完成"""
+	"""Bluetooth adapter initialization finished"""
 	if success:
 		print("✓ Bluetooth adapter initialized")
-		# 初始化成功后自动开始扫描
+		# Start scanning automatically after initialization succeeds
 		start_scanning()
 	else:
 		print("✗ Bluetooth initialization failed: ", error)
 
 func _on_scan_started():
-	"""扫描开始"""
+	"""Scan started"""
 	print("✓ Scan started")
 
 func _on_scan_stopped():
-	"""扫描停止，处理发现的设备"""
+	"""Scan stopped; process discovered devices"""
 	print("✓ Scan stopped")
 	
-	# 获取所有发现的设备
+	# Fetch all discovered devices
 	var devices = bluetooth_manager.get_discovered_devices()
 	print("\n=== Scan Results ===")
 	print("  Total devices found: ", devices.size())
 	
-	# 查找目标设备 "Fantety11"
+	# Look for the target device "Fantety11"
 	var target_address = ""
 	for device in devices:
 		var name = device.get("name", "")
@@ -138,11 +138,11 @@ func _on_scan_stopped():
 			print("  ✓ Found target device: Fantety11")
 			break
 	
-	# 连接到目标设备
+	# Connect to the target device
 	if target_address != "":
 		connect_to_device(target_address)
 	elif devices.size() > 0 and connected_device == null:
-		# 如果没找到目标设备，连接到第一个设备（用于测试）
+		# If the target is not found, connect to the first device (for testing)
 		var first_device = devices[0]
 		var address = first_device.get("address", "")
 		var name = first_device.get("name", "Unknown")
@@ -152,48 +152,48 @@ func _on_scan_stopped():
 		print("  ✗ No devices available to connect")
 
 func _on_device_discovered(device_info: Dictionary):
-	"""发现新设备时的回调"""
+	"""Callback when a new device is discovered"""
 	var name = device_info.get("name", "Unknown")
 	var address = device_info.get("address", "")
 	var rssi = device_info.get("rssi", 0)
 	print("  Device: ", name, " (", address, ") RSSI: ", rssi, " dBm")
 
 func _on_device_connected(address: String):
-	"""设备连接成功（管理器信号）"""
+	"""Device connected (manager signal)"""
 	print("✓ Device connected (manager): ", address)
 
 func _on_device_disconnected(address: String):
-	"""设备断开连接（管理器信号）"""
+	"""Device disconnected (manager signal)"""
 	print("✗ Device disconnected (manager): ", address)
 	connected_device = null
 
 func _on_error_occurred(error_message: String):
-	"""发生错误"""
+	"""Error occurred"""
 	print("✗ Error: ", error_message)
 
 # ============================================================================
-# 信号回调函数 - BleDevice
+# Signal callbacks - BleDevice
 # ============================================================================
 
 func _on_device_connected_signal():
-	"""设备连接成功（设备信号）"""
+	"""Device connected (device signal)"""
 	print("✓ Device connected successfully")
-	# 连接成功后立即发现服务
+	# Discover services immediately after connecting
 	discover_services()
 
 func _on_device_disconnected_signal():
-	"""设备断开连接（设备信号）"""
+	"""Device disconnected (device signal)"""
 	print("✗ Device disconnected")
 	connected_device = null
 
 func _on_connection_failed(error: String):
-	"""连接失败"""
+	"""Connection failed"""
 	print("✗ Connection failed: ", error)
 	connected_device = null
 
 
 func _on_services_discovered(services: Array):
-	"""服务发现完成，处理 fff0 服务"""
+	"""Service discovery finished; process the fff0 service"""
 	print("\n=== Services Discovered ===")
 	print("  Total services: ", services.size())
 	
@@ -201,7 +201,7 @@ func _on_services_discovered(services: Array):
 		print("  ✗ No services found")
 		return
 	
-	# 查找并处理 fff0 服务
+	# Find and handle the fff0 service
 	var fff0_found = false
 	var fff1_subscribed = false
 	var fff2_written = false
@@ -209,7 +209,7 @@ func _on_services_discovered(services: Array):
 	for service in services:
 		var service_uuid = service.get("uuid", "")
 		
-		# 检查是否是 fff0 服务
+		# Check whether this is the fff0 service
 		if service_uuid == FFF0_SERVICE:
 			print("\n=== Processing fff0 Service ===")
 			print("  Service UUID: ", service_uuid)
@@ -218,12 +218,12 @@ func _on_services_discovered(services: Array):
 			var characteristics = service.get("characteristics", [])
 			print("  Characteristics: ", characteristics.size())
 			
-			# 遍历特征
+			# Iterate characteristics
 			for characteristic in characteristics:
 				var char_uuid = characteristic.get("uuid", "")
 				var properties = characteristic.get("properties", {})
 				
-				# 处理 fff1 特征（订阅通知）
+				# Handle the fff1 characteristic (subscribe to notifications)
 				if char_uuid == FFF1_CHARACTERISTIC:
 					print("\n  [fff1] Notification Characteristic")
 					print("    UUID: ", char_uuid)
@@ -236,7 +236,7 @@ func _on_services_discovered(services: Array):
 					else:
 						print("    ✗ Warning: Notifications not supported")
 				
-				# 处理 fff2 特征（写入数据）
+				# Handle the fff2 characteristic (write data)
 				elif char_uuid == FFF2_CHARACTERISTIC:
 					print("\n  [fff2] Write Characteristic")
 					print("    UUID: ", char_uuid)
@@ -250,10 +250,10 @@ func _on_services_discovered(services: Array):
 					else:
 						print("    ✗ Warning: Write not supported")
 			
-			# 找到 fff0 服务后退出循环
+			# Stop after finding the fff0 service
 			break
 	
-	# 输出操作摘要
+	# Output operation summary
 	print("\n=== Operation Summary ===")
 	if fff0_found:
 		print("  ✓ fff0 service found")
@@ -267,19 +267,19 @@ func _on_services_discovered(services: Array):
 		print("  ✗ fff0 service not found")
 
 func subscribe_to_fff1():
-	"""订阅 fff1 特征的通知"""
+	"""Subscribe to notifications on the fff1 characteristic"""
 	if connected_device:
 		connected_device.subscribe_characteristic(FFF0_SERVICE, FFF1_CHARACTERISTIC)
 
 func write_to_fff2(text: String):
-	"""写入文本数据到 fff2 特征"""
+	"""Write text data to the fff2 characteristic"""
 	if connected_device:
 		var data = text.to_utf8_buffer()
-		# 使用无响应写入（更快）
+		# Use write-without-response (faster)
 		connected_device.write_characteristic(FFF0_SERVICE, FFF2_CHARACTERISTIC, data, false)
 
 func _on_characteristic_read(char_uuid: String, data: PackedByteArray):
-	"""特征读取完成"""
+	"""Characteristic read completed"""
 	print("\n=== Characteristic Read ===")
 	print("  UUID: ", char_uuid)
 	print("  Length: ", data.size(), " bytes")
@@ -290,43 +290,43 @@ func _on_characteristic_read(char_uuid: String, data: PackedByteArray):
 		print("  Text: ", text)
 
 func _on_characteristic_written(char_uuid: String):
-	"""特征写入完成"""
+	"""Characteristic write completed"""
 	print("\n=== Characteristic Written ===")
 	print("  UUID: ", char_uuid)
 	
-	# 特别标记 fff2 的写入
+	# Highlight writes to fff2
 	if char_uuid.to_lower() == FFF2_CHARACTERISTIC:
 		print("  ✓ Data successfully written to fff2")
 
 func _on_characteristic_notified(char_uuid: String, data: PackedByteArray):
-	"""收到特征通知（这是接收数据的主要方式）"""
+	"""Received characteristic notification (primary data path)"""
 	print("=== NOTIFICATION RECEIVED ===")
 	print("  UUID: ", char_uuid)
 	print("  Length: ", data.size(), " bytes")
 	print("  Hex: ", data.hex_encode())
 	
-	# 尝试解析为文本
+	# Try to parse as text
 	var text = data.get_string_from_utf8()
 	if text != "":
 		print("  Text: '", text, "'")
 	
-	# 特别标记来自 fff1 的通知
+	# Highlight notifications from fff1
 	if char_uuid.to_lower() == FFF1_CHARACTERISTIC:
 		print("\n  >>> This notification is from fff1 characteristic! <<<")
 		print("  >>> Your device sent this data <<<")
 
 func _on_operation_failed(operation: String, error: String):
-	"""操作失败"""
+	"""Operation failed"""
 	print("\n✗ Operation Failed")
 	print("  Operation: ", operation)
 	print("  Error: ", error)
 
 # ============================================================================
-# 清理函数
+# Cleanup
 # ============================================================================
 
 func _exit_tree():
-	"""节点销毁时清理资源"""
+	"""Clean up resources when the node is destroyed"""
 	print("\n=== Cleaning Up ===")
 	
 	if connected_device:

@@ -1,7 +1,7 @@
 use godot::prelude::*;
 use crate::ble_characteristic::BleCharacteristicInfo;
 
-/// BLE 服务信息
+/// BLE service info
 #[derive(Clone, Debug)]
 pub struct BleServiceInfo {
     pub uuid: String,
@@ -9,7 +9,7 @@ pub struct BleServiceInfo {
 }
 
 impl BleServiceInfo {
-    /// 创建新的服务信息
+    /// Create a new service info record
     pub fn new(uuid: String, characteristics: Vec<BleCharacteristicInfo>) -> Self {
         Self {
             uuid,
@@ -17,7 +17,7 @@ impl BleServiceInfo {
         }
     }
 
-    /// 转换为 Godot Dictionary
+    /// Convert to a Godot Dictionary
     pub fn to_dictionary(&self) -> Dictionary {
         let mut dict = Dictionary::new();
         dict.set("uuid", self.uuid.clone());

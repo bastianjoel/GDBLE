@@ -1,20 +1,20 @@
 use godot::prelude::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// 全局调试模式标志
+/// Global debug-mode flag
 static DEBUG_MODE: AtomicBool = AtomicBool::new(false);
 
-/// 设置调试模式
+/// Enable or disable debug mode
 pub fn set_debug_mode(enabled: bool) {
     DEBUG_MODE.store(enabled, Ordering::Relaxed);
 }
 
-/// 检查是否启用调试模式
+/// Check whether debug mode is enabled
 pub fn is_debug_mode() -> bool {
     DEBUG_MODE.load(Ordering::Relaxed)
 }
 
-/// 调试日志宏 - 仅在调试模式下输出
+/// Debug log macro (emits only when debug mode is on)
 #[macro_export]
 macro_rules! ble_debug {
     ($($arg:tt)*) => {
@@ -24,7 +24,7 @@ macro_rules! ble_debug {
     };
 }
 
-/// 信息日志宏 - 仅在调试模式下输出
+/// Info log macro (emits only when debug mode is on)
 #[macro_export]
 macro_rules! ble_info {
     ($($arg:tt)*) => {
@@ -34,7 +34,7 @@ macro_rules! ble_info {
     };
 }
 
-/// 警告日志宏 - 仅在调试模式下输出
+/// Warning log macro (emits only when debug mode is on)
 #[macro_export]
 macro_rules! ble_warn {
     ($($arg:tt)*) => {
@@ -44,7 +44,7 @@ macro_rules! ble_warn {
     };
 }
 
-/// 错误日志宏 - 仅在调试模式下输出
+/// Error log macro (emits only when debug mode is on)
 #[macro_export]
 macro_rules! ble_error {
     ($($arg:tt)*) => {
@@ -54,7 +54,7 @@ macro_rules! ble_error {
     };
 }
 
-/// 设备信息结构
+/// Device info structure
 #[derive(Clone, Debug)]
 pub struct DeviceInfo {
     pub address: String,
@@ -67,7 +67,7 @@ pub struct DeviceInfo {
 }
 
 impl DeviceInfo {
-    /// 创建新的设备信息
+    /// Construct a new device info record
     pub fn new(
         address: String, 
         name: Option<String>, 
@@ -88,7 +88,7 @@ impl DeviceInfo {
         }
     }
 
-    /// 转换为 Godot Dictionary
+    /// Convert to a Godot Dictionary
     pub fn to_dictionary(&self) -> Dictionary {
         let mut dict = Dictionary::new();
         dict.set("address", self.address.clone());
@@ -145,109 +145,109 @@ impl DeviceInfo {
     }
 }
 
-/// BLE 错误类型
+/// BLE error types
 #[derive(Debug, Clone)]
 pub enum BleError {
-    /// 未找到蓝牙适配器
+    /// Bluetooth adapter not found
     AdapterNotFound,
-    /// 未找到设备
+    /// Device not found
     DeviceNotFound(String),
-    /// 连接失败
+    /// Connection failed
     ConnectionFailed(String),
-    /// 操作失败
+    /// Operation failed
     OperationFailed(String),
-    /// 设备未连接
+    /// Device not connected
     NotConnected,
-    /// 无效的 UUID
+    /// Invalid UUID
     InvalidUuid(String),
-    /// 服务未找到
+    /// Service not found
     ServiceNotFound(String),
-    /// 特征值未找到
+    /// Characteristic not found
     CharacteristicNotFound(String),
-    /// 扫描失败
+    /// Scan failed
     ScanFailed(String),
-    /// 初始化失败
+    /// Initialization failed
     InitializationFailed(String),
-    /// 读取失败
+    /// Read failed
     ReadFailed(String),
-    /// 写入失败
+    /// Write failed
     WriteFailed(String),
-    /// 订阅失败
+    /// Subscription failed
     SubscribeFailed(String),
-    /// 取消订阅失败
+    /// Unsubscribe failed
     UnsubscribeFailed(String),
-    /// 服务发现失败
+    /// Service discovery failed
     ServiceDiscoveryFailed(String),
-    /// 权限错误
+    /// Permission denied
     PermissionDenied(String),
-    /// 超时错误
+    /// Timeout
     Timeout(String),
-    /// 内部错误
+    /// Internal error
     InternalError(String),
 }
 
 impl BleError {
-    /// 转换为 GString (用于 Godot 信号)
+    /// Convert to GString (for Godot signals)
     pub fn to_gstring(&self) -> GString {
         GString::from(self.to_string().as_str())
     }
 
-    /// 转换为字符串描述
+    /// Convert to a human-readable string
     pub fn to_string(&self) -> String {
         match self {
             BleError::AdapterNotFound => {
-                "未找到蓝牙适配器，请确保系统蓝牙已启用".to_string()
+                "Bluetooth adapter not found; ensure system Bluetooth is enabled".to_string()
             }
             BleError::DeviceNotFound(addr) => {
-                format!("未找到指定的蓝牙设备: {}", addr)
+                format!("Unable to find the specified Bluetooth device: {}", addr)
             }
             BleError::ConnectionFailed(msg) => {
-                format!("连接失败: {}", msg)
+                format!("Connection failed: {}", msg)
             }
             BleError::OperationFailed(msg) => {
-                format!("操作失败: {}", msg)
+                format!("Operation failed: {}", msg)
             }
             BleError::NotConnected => {
-                "设备未连接，请先连接设备".to_string()
+                "Device is not connected; connect the device first".to_string()
             }
             BleError::InvalidUuid(uuid) => {
-                format!("无效的 UUID: {}", uuid)
+                format!("Invalid UUID: {}", uuid)
             }
             BleError::ServiceNotFound(uuid) => {
-                format!("未找到服务 UUID: {}", uuid)
+                format!("Service UUID not found: {}", uuid)
             }
             BleError::CharacteristicNotFound(uuid) => {
-                format!("未找到特征值 UUID: {}", uuid)
+                format!("Characteristic UUID not found: {}", uuid)
             }
             BleError::ScanFailed(msg) => {
-                format!("扫描失败: {}", msg)
+                format!("Scan failed: {}", msg)
             }
             BleError::InitializationFailed(msg) => {
-                format!("初始化失败: {}", msg)
+                format!("Initialization failed: {}", msg)
             }
             BleError::ReadFailed(msg) => {
-                format!("读取特征值失败: {}", msg)
+                format!("Characteristic read failed: {}", msg)
             }
             BleError::WriteFailed(msg) => {
-                format!("写入特征值失败: {}", msg)
+                format!("Characteristic write failed: {}", msg)
             }
             BleError::SubscribeFailed(msg) => {
-                format!("订阅通知失败: {}", msg)
+                format!("Subscription to notifications failed: {}", msg)
             }
             BleError::UnsubscribeFailed(msg) => {
-                format!("取消订阅失败: {}", msg)
+                format!("Unsubscribe failed: {}", msg)
             }
             BleError::ServiceDiscoveryFailed(msg) => {
-                format!("服务发现失败: {}", msg)
+                format!("Service discovery failed: {}", msg)
             }
             BleError::PermissionDenied(msg) => {
-                format!("权限被拒绝: {}", msg)
+                format!("Permission denied: {}", msg)
             }
             BleError::Timeout(msg) => {
-                format!("操作超时: {}", msg)
+                format!("Operation timed out: {}", msg)
             }
             BleError::InternalError(msg) => {
-                format!("内部错误: {}", msg)
+                format!("Internal error: {}", msg)
             }
         }
     }
@@ -303,7 +303,7 @@ impl std::fmt::Display for BleError {
 
 impl std::error::Error for BleError {}
 
-/// 适配器信息结构
+/// Adapter info structure
 #[derive(Clone, Debug)]
 pub struct AdapterInfo {
     pub name: String,
@@ -311,12 +311,12 @@ pub struct AdapterInfo {
 }
 
 impl AdapterInfo {
-    /// 创建新的适配器信息
+    /// Construct a new adapter info record
     pub fn new(name: String, address: Option<String>) -> Self {
         Self { name, address }
     }
 
-    /// 转换为 Godot Dictionary
+    /// Convert to a Godot Dictionary
     pub fn to_dictionary(&self) -> Dictionary {
         let mut dict = Dictionary::new();
         dict.set("name", self.name.clone());

@@ -1,6 +1,6 @@
 use godot::prelude::*;
 
-/// 特征值属性
+/// Characteristic properties
 #[derive(Clone, Debug)]
 pub struct CharacteristicProperties {
     pub read: bool,
@@ -11,7 +11,7 @@ pub struct CharacteristicProperties {
 }
 
 impl CharacteristicProperties {
-    /// 转换为 Godot Dictionary
+    /// Convert to a Godot Dictionary
     pub fn to_dictionary(&self) -> Dictionary {
         let mut dict = Dictionary::new();
         dict.set("read", self.read);
@@ -23,7 +23,7 @@ impl CharacteristicProperties {
     }
 }
 
-/// BLE 特征值信息
+/// BLE characteristic info
 #[derive(Clone, Debug)]
 pub struct BleCharacteristicInfo {
     pub uuid: String,
@@ -31,12 +31,12 @@ pub struct BleCharacteristicInfo {
 }
 
 impl BleCharacteristicInfo {
-    /// 创建新的特征值信息
+    /// Create a new characteristic info record
     pub fn new(uuid: String, properties: CharacteristicProperties) -> Self {
         Self { uuid, properties }
     }
 
-    /// 转换为 Godot Dictionary
+    /// Convert to a Godot Dictionary
     pub fn to_dictionary(&self) -> Dictionary {
         let mut dict = Dictionary::new();
         dict.set("uuid", self.uuid.clone());
