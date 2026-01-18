@@ -5,10 +5,24 @@ extends Node
 
 var bluetooth_manager: BluetoothManager
 var connected_device: BleDevice = null
+var start_scan_button: Button
+var device_list: ItemList
+var service_list: ItemList
+var address_to_index: Dictionary = {}
+var adapter_ready := false
+var scanning := false
+var current_services: Array = []
 
 func _ready():
 	print("=== Bluetooth Plugin Test ===")
-	
+	start_scan_button = $Button
+	device_list = $ItemList
+	service_list = $ServiceList
+	start_scan_button.disabled = true
+	start_scan_button.pressed.connect(_on_start_scan_pressed)
+	device_list.item_selected.connect(_on_item_selected)
+	service_list.item_selected.connect(_on_service_selected)
+
 	# Create a BluetoothManager instance
 	bluetooth_manager = BluetoothManager.new()
 	add_child(bluetooth_manager)
@@ -25,15 +39,28 @@ func _ready():
 	# Initialize the Bluetooth adapter
 	print("Initializing Bluetooth adapter...")
 	# Disable verbose debug output
-	bluetooth_manager.set_debug_mode(false)
+	bluetooth_manager.set_debug_mode(true)
 	bluetooth_manager.initialize()
-	#start_scanning()
 
 func start_scanning():
 	print("\n=== Starting BLE Scan ===")
-	
+	device_list.clear()
+	address_to_index.clear()
+	service_list.clear()
+	current_services.clear()
 	# Begin scanning (10 seconds)
 	bluetooth_manager.start_scan(10.0)
+
+func _on_start_scan_pressed():
+	if not adapter_ready:
+		print("Adapter not ready; cannot start scan yet")
+		return
+	if scanning:
+		print("Scan already running; stopping previous scan")
+		bluetooth_manager.stop_scan()
+		return
+	start_scan_button.disabled = true
+	start_scanning()
 
 func connect_to_device(address: String):
 	print("\n=== Connecting to device: ", address, " ===")
@@ -106,42 +133,22 @@ func unsubscribe_characteristic_example(service_uuid: String, char_uuid: String)
 func _on_adapter_initialized(success: bool, error: String):
 	if success:
 		print("Bluetooth adapter initialized successfully")
-		# After successful init, start scanning
-		start_scanning()
+		adapter_ready = true
+		start_scan_button.disabled = false
 	else:
 		print("Failed to initialize Bluetooth adapter: ", error)
 
 func _on_scan_started():
 	print("Scan started")
+	scanning = true
 
 func _on_scan_stopped():
 	print("Scan stopped")
-	
+	scanning = false
+	start_scan_button.disabled = false
 	# Fetch all discovered devices
 	var devices = bluetooth_manager.get_discovered_devices()
 	print("\nTotal devices discovered: ", devices.size())
-	
-	# Search for and connect to the "Fantety11" device
-	var target_address = ""
-	for device in devices:
-		var name = device.get("name", "")
-		if name == "Fantety11":
-			target_address = device.get("address", "")
-			break
-	
-	if target_address != "":
-		print("Found target device: Fantety11 at ", target_address)
-		connect_to_device(target_address)
-	elif devices.size() > 0 and connected_device == null:
-		# If the target is missing, connect to the first device
-		var first_device = devices[0]
-		var address = first_device.get("address", "")
-		var name = first_device.get("name", "")
-		if address != "":
-			print("Connecting to first available device: ", name, " at ", address)
-			connect_to_device(address)
-	else:
-		print("No devices found to connect to")
 
 func _on_device_discovered(device_info: Dictionary):
 	print("\nDevice discovered:")
@@ -149,12 +156,37 @@ func _on_device_discovered(device_info: Dictionary):
 	print("  Address: ", device_info.get("address", ""))
 	print("  RSSI: ", device_info.get("rssi", 0), " dBm")
 
+	var address: String = device_info.get("address", "")
+	if address == "":
+		return
+	var raw_name = device_info.get("name")
+	var device_name: String = str(raw_name) if raw_name != null else "Unknown"
+	var label := "%s (%s)" % [device_name, address]
+	var raw_rssi = device_info.get("rssi")
+	var rssi: int = 0
+	if raw_rssi is int:
+		rssi = raw_rssi
+	elif raw_rssi is float:
+		rssi = int(raw_rssi)
+
+	if address_to_index.has(address):
+		var idx: int = address_to_index[address]
+		device_list.set_item_text(idx, label)
+		device_list.set_item_tooltip(idx, "RSSI: %s dBm" % rssi)
+	else:
+		var idx: int = device_list.get_item_count()
+		device_list.add_item(label)
+		device_list.set_item_metadata(idx, address)
+		device_list.set_item_tooltip(idx, "RSSI: %s dBm" % rssi)
+		address_to_index[address] = idx
+
 func _on_device_connected(address: String):
 	print("Device connected (manager signal): ", address)
 
 func _on_device_disconnected(address: String):
 	print("Device disconnected (manager signal): ", address)
 	connected_device = null
+	start_scan_button.disabled = false
 
 func _on_device_connected_signal():
 	print("Device connected successfully")
@@ -174,6 +206,8 @@ func _on_services_discovered(services: Array):
 	print("\n=== Services discovered callback ===")
 	print("Received services array, size: ", services.size())
 	print("Services data: ", services)
+	service_list.clear()
+	current_services = services.duplicate(true)
 	
 	if services.size() == 0:
 		print("No services discovered")
@@ -186,6 +220,11 @@ func _on_services_discovered(services: Array):
 		
 		var characteristics = service.get("characteristics", [])
 		print("    Characteristics count: ", characteristics.size())
+		var label := "%s (%d chars)" % [service_uuid, characteristics.size()]
+		var idx: int = service_list.get_item_count()
+		service_list.add_item(label)
+		service_list.set_item_metadata(idx, service)
+		service_list.set_item_tooltip(idx, "Characteristics: %d" % characteristics.size())
 		for characteristic in characteristics:
 			var char_uuid = characteristic.get("uuid", "")
 			var properties = characteristic.get("properties", {})
@@ -284,6 +323,35 @@ func _on_operation_failed(operation: String, error: String):
 
 func _on_error_occurred(error_message: String):
 	print("\nError occurred: ", error_message)
+
+func _on_item_selected(index: int):
+	var address = device_list.get_item_metadata(index)
+	if address == null:
+		print("No address metadata for selected item")
+		return
+	if connected_device and connected_device.get_address() == String(address):
+		print("Already connected to selected device")
+		return
+	if scanning:
+		bluetooth_manager.stop_scan()
+	print("Connecting to selected device from list")
+	connect_to_device(String(address))
+
+func _on_service_selected(index: int):
+	var service = service_list.get_item_metadata(index)
+	if service == null:
+		print("No service metadata for selected item")
+		return
+	var service_uuid: String = service.get("uuid", "")
+	var characteristics: Array = service.get("characteristics", [])
+	print("\n=== Service selected ===")
+	print("Service UUID: ", service_uuid)
+	print("Characteristic count: ", characteristics.size())
+	for characteristic in characteristics:
+		var char_uuid = characteristic.get("uuid", "")
+		var properties = characteristic.get("properties", {})
+		print("  Characteristic: ", char_uuid)
+		print("    Properties: read=", properties.get("read", false), ", write=", properties.get("write", false), ", write_no_resp=", properties.get("write_without_response", false), ", notify=", properties.get("notify", false), ", indicate=", properties.get("indicate", false))
 
 func _exit_tree():
 	# Clean up resources

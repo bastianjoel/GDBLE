@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use crate::ble_device::BleDevice;
 use crate::bluetooth_scanner::BluetoothScanner;
 use crate::runtime::RuntimeManager;
-use crate::types::{AdapterInfo, BleError, DeviceInfo, set_debug_mode, is_debug_mode};
+use crate::types::{AdapterInfo, BleError, DeviceInfo, LogLevel, drain_logs, set_debug_mode, is_debug_mode};
 use crate::{ble_debug, ble_info, ble_warn, ble_error};
 
 /// BluetoothManager is the main entry point for BLE functionality in Godot
@@ -70,6 +70,16 @@ impl INode for BluetoothManager {
 
     /// Called every frame to process scan results and discovered devices
     fn process(&mut self, _delta: f64) {
+        // Flush queued logs onto the Godot main thread
+        for (level, message) in drain_logs() {
+            match level {
+                LogLevel::Debug => godot_print!("[BLE Debug] {}", message),
+                LogLevel::Info => godot_print!("[BLE Info] {}", message),
+                LogLevel::Warn => godot_warn!("[BLE Warning] {}", message),
+                LogLevel::Error => godot_error!("[BLE Error] {}", message),
+            }
+        }
+
         // Collect discovered devices (real-time)
         let mut devices_to_emit = Vec::new();
         if let Some(ref rx_arc) = self.device_rx {

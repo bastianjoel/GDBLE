@@ -1,8 +1,12 @@
 use godot::prelude::*;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 /// Global debug-mode flag
 static DEBUG_MODE: AtomicBool = AtomicBool::new(false);
+
+/// Thread-safe log queue to funnel background-thread logs to the Godot main thread
+static LOG_QUEUE: OnceLock<Mutex<Vec<(LogLevel, String)>>> = OnceLock::new();
 
 /// Enable or disable debug mode
 pub fn set_debug_mode(enabled: bool) {
@@ -14,12 +18,40 @@ pub fn is_debug_mode() -> bool {
     DEBUG_MODE.load(Ordering::Relaxed)
 }
 
+/// Log level for queued BLE logs
+#[derive(Clone, Copy)]
+pub enum LogLevel {
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+fn log_queue() -> &'static Mutex<Vec<(LogLevel, String)>> {
+    LOG_QUEUE.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+pub fn enqueue_log(level: LogLevel, message: String) {
+    if let Ok(mut queue) = log_queue().lock() {
+        queue.push((level, message));
+    }
+}
+
+/// Drain queued logs (to be called from the Godot main thread)
+pub fn drain_logs() -> Vec<(LogLevel, String)> {
+    let mut out = Vec::new();
+    if let Ok(mut queue) = log_queue().lock() {
+        std::mem::swap(&mut *queue, &mut out);
+    }
+    out
+}
+
 /// Debug log macro (emits only when debug mode is on)
 #[macro_export]
 macro_rules! ble_debug {
     ($($arg:tt)*) => {
         if $crate::types::is_debug_mode() {
-            godot::prelude::godot_print!("[BLE Debug] {}", format!($($arg)*));
+            $crate::types::enqueue_log($crate::types::LogLevel::Debug, format!($($arg)*));
         }
     };
 }
@@ -29,7 +61,7 @@ macro_rules! ble_debug {
 macro_rules! ble_info {
     ($($arg:tt)*) => {
         if $crate::types::is_debug_mode() {
-            godot::prelude::godot_print!("[BLE Info] {}", format!($($arg)*));
+            $crate::types::enqueue_log($crate::types::LogLevel::Info, format!($($arg)*));
         }
     };
 }
@@ -39,7 +71,7 @@ macro_rules! ble_info {
 macro_rules! ble_warn {
     ($($arg:tt)*) => {
         if $crate::types::is_debug_mode() {
-            godot::prelude::godot_warn!("[BLE Warning] {}", format!($($arg)*));
+            $crate::types::enqueue_log($crate::types::LogLevel::Warn, format!($($arg)*));
         }
     };
 }
@@ -49,7 +81,7 @@ macro_rules! ble_warn {
 macro_rules! ble_error {
     ($($arg:tt)*) => {
         if $crate::types::is_debug_mode() {
-            godot::prelude::godot_error!("[BLE Error] {}", format!($($arg)*));
+            $crate::types::enqueue_log($crate::types::LogLevel::Error, format!($($arg)*));
         }
     };
 }
@@ -92,17 +124,13 @@ impl DeviceInfo {
     pub fn to_dictionary(&self) -> VarDictionary {
         let mut dict = VarDictionary::new();
         dict.set("address", self.address.clone());
-        
+
         if let Some(ref name) = self.name {
             dict.set("name", name.clone());
-        } else {
-            dict.set("name", Variant::nil());
         }
-        
+
         if let Some(rssi) = self.rssi {
             dict.set("rssi", rssi);
-        } else {
-            dict.set("rssi", Variant::nil());
         }
 
         // Services
@@ -137,8 +165,6 @@ impl DeviceInfo {
         // TX Power Level
         if let Some(tx) = self.tx_power_level {
             dict.set("tx_power_level", tx);
-        } else {
-            dict.set("tx_power_level", Variant::nil());
         }
         
         dict
@@ -286,12 +312,12 @@ impl BleError {
 
     /// Log the error to the Godot console
     pub fn log_error(&self) {
-        godot_error!("[BLE Error] {}: {}", self.error_code(), self.to_string());
+        enqueue_log(LogLevel::Error, format!("{}: {}", self.error_code(), self.to_string()));
     }
 
     /// Log a warning to the Godot console
     pub fn log_warning(&self) {
-        godot_warn!("[BLE Warning] {}: {}", self.error_code(), self.to_string());
+        enqueue_log(LogLevel::Warn, format!("{}: {}", self.error_code(), self.to_string()));
     }
 }
 
