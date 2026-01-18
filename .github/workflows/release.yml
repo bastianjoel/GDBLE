@@ -3,13 +3,13 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., v1.0.0)'
+        description: "Release version (e.g., v1.0.0)"
         required: true
-        default: 'v1.0.0'
+        default: "v1.0.0"
 
 env:
   CARGO_TERM_COLOR: always
@@ -89,7 +89,6 @@ jobs:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
-
       - name: Cache cargo index
         uses: actions/cache@v4
         with:
@@ -130,7 +129,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts/${{ matrix.platform }}
-          
+
           # Rename and copy with platform and architecture suffix
           case "${{ matrix.platform }}" in
             windows)
@@ -179,10 +178,10 @@ jobs:
       - name: Create release package
         run: |
           mkdir -p release/addons/gdble
-          
+
           # Copy gdextension file
           cp demo/addons/gdble/gdble.gdextension release/addons/gdble/
-          
+
           # Copy Windows binary
           if [ -f artifacts/gdble-windows/gdble.windows.x86_64.dll ]; then
             cp artifacts/gdble-windows/gdble.windows.x86_64.dll release/addons/gdble/gdble.windows.x86_64.dll
@@ -212,17 +211,17 @@ jobs:
           if [ -f artifacts/gdble-linux/libgdble.x86_64.so ]; then
             cp artifacts/gdble-linux/libgdble.x86_64.so release/addons/gdble/libgdble.x86_64.so
           fi
-          
+
           # Copy documentation
           cp README.md release/
           cp README_EN.md release/
           cp LICENSE release/ 2>/dev/null || echo "No LICENSE file found"
-          
+
           # Create zip archive
           cd release
           zip -r ../gdble-release.zip .
           cd ..
-          
+
           # List contents
           echo "Release package contents:"
           unzip -l gdble-release.zip
@@ -258,7 +257,7 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           else
-            echo "branch=master" >> $GITHUB_OUTPUT
+            echo "branch=main" >> $GITHUB_OUTPUT
           fi
 
       - name: Checkout target branch
@@ -270,19 +269,19 @@ jobs:
         run: |
           # Ensure addons/gdble directory exists
           mkdir -p addons/gdble
-          
+
           # Copy gdextension file if it doesn't exist
           if [ ! -f addons/gdble/gdble.gdextension ] && [ -f demo/addons/gdble/gdble.gdextension ]; then
             cp demo/addons/gdble/gdble.gdextension addons/gdble/
             echo "✓ Copied gdextension file"
           fi
-          
+
           # Copy Windows binary
           if [ -f artifacts/gdble-windows/gdble.windows.x86_64.dll ]; then
             cp artifacts/gdble-windows/gdble.windows.x86_64.dll addons/gdble/gdble.windows.x86_64.dll
             echo "✓ Updated Windows binary"
           fi
-          
+
           # Copy macOS binaries for universal binary creation
           if [ -f artifacts/gdble-macos/libgdble.macos.x86_64.dylib ]; then
             cp artifacts/gdble-macos/libgdble.macos.x86_64.dylib addons/gdble/libgdble.macos.x86_64.dylib
@@ -315,10 +314,10 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
+
           # Add all files in addons/gdble
           git add addons/gdble/*.dll addons/gdble/*.dylib addons/gdble/*.so addons/gdble/*.gdextension 2>/dev/null || true
-          
+
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
@@ -363,39 +362,39 @@ jobs:
             gdble-release.zip
           body: |
             # GDBLE ${{ steps.get_version.outputs.version }}
-            
+
             ##  What's Updated in This Release
-            
+
             - **Enhanced Device Discovery**: Now exposes complete advertising data from btleplug
             - **Service UUIDs**: Access advertised service UUIDs during scanning for device filtering
             - **Manufacturer Data**: Full manufacturer data exposure in scan results
             - **Service Data**: Access service-specific data from advertisements
             - **TX Power Level**: Signal strength information for better device selection
             - **Improved DeviceInfo Structure**: All advertising data now available in `device_discovered` signal
-            
+
             This update enables advanced filtering scenarios, such as displaying only relevant BLE controllers (e.g., fitness game peripherals) instead of all nearby devices.
-            
+
             ## 🌍 Platform Support
-            
+
             - ✅ **Windows** 10+ (x86_64)
             - ✅ **macOS** 10.15+ (x86_64, ARM64)
             - ✅ **Linux** (x86_64)
             - ⚠️ **Android** 5.0+ (API 21+, ARM64, x86_64) - Not tested, may not work correctly
-            
+
             > ⚠️ **Note**: Android ARMv7 (32-bit) is not supported due to godot-ffi compatibility issues. Please use ARM64 or x86_64 architectures for Android builds.
             > 
             > ⚠️ **Important**: Android support in this release has not been tested. While the code compiles successfully, actual functionality on Android devices is not guaranteed. Please test thoroughly before using in production.
-            
+
             ## 📚 Documentation
-            
+
             - 📖 [中文文档 (Chinese)](https://github.com/Fantety/GodotBLE/blob/master/README.md)
             - 📖 [English Documentation](https://github.com/Fantety/GodotBLE/blob/master/README_EN.md)
             - 🎮 [Demo Guide](https://github.com/Fantety/GodotBLE/blob/master/demo/DEMO_GUIDE.md)
             - 🚀 [Quick Start](https://github.com/Fantety/GodotBLE/blob/master/QUICK_START_RELEASE.md)
             - 🤖 [Android Build Guide](https://github.com/Fantety/GodotBLE/blob/master/ANDROID_BUILD.md)
-            
+
             ---
-            
+
             **Full Changelog**: https://github.com/Fantety/GodotBLE/compare/${{ steps.get_version.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
